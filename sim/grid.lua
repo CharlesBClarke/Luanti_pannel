@@ -8,7 +8,7 @@
 -- Ports: side d, bit b (0..7, left to right or top to bottom) is port d * 8 + b.
 --
 -- A cell is nil (empty) or a table:
---   { kind = "dust" | "block" | "quartz" | "bulb" | "lamp" }
+--   { kind = "dust" | "block" | "quartz" | "bulb" | "lamp" | "button" | "lever" }
 --   { kind = "torch", attach = d }           -- stands on the cell in direction d
 --   { kind = "panel", id = k, speed = n }    -- a compiled panel from the library
 
@@ -19,6 +19,8 @@ grid.PAD = grid.SIZE + 2
 grid.BITS = grid.SIZE
 grid.PORTS = 4 * grid.SIZE
 grid.BUTTON_TICKS = 10
+-- Ticks run from the starting state before a panel counts as powered on.
+grid.WARMUP_TICKS = 80
 
 local SIZE, PAD = grid.SIZE, grid.PAD
 local STEP = { [0] = { 0, -1 }, { 1, 0 }, { 0, 1 }, { -1, 0 } } -- {dx, dy}

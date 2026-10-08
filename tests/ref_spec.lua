@@ -83,6 +83,61 @@ return {
 		assert(trace(st, on, port(E, 3), 4) == "0011", "flips back on the next press")
 	end,
 
+	["lever toggles on each press and drives the edge directly"] = function()
+		local st = ref.from_library(library({ { 1, 4, "lever" } }), 0)
+		assert(trace(st, {}, port(W, 3), 2) == "00")
+		ref.press(st, grid.index(1, 4))
+		assert(trace(st, {}, port(W, 3), 2) == "11")
+		ref.press(st, grid.index(1, 4))
+		assert(trace(st, {}, port(W, 3), 2) == "00")
+	end,
+
+	["pressing an empty cell does nothing"] = function()
+		local st = ref.from_library(library({ { 1, 4, "lever" } }), 0)
+		ref.press(st, grid.index(2, 4))
+		assert(trace(st, {}, port(W, 3), 2) == "00")
+	end,
+
+	["button stays on for BUTTON_TICKS ticks"] = function()
+		-- button -> dust -> block; torch reads the block -> east edge
+		local st = ref.from_library(library({
+			{ 1, 4, "button" }, { 2, 4, "dust" }, { 3, 4, "block" }, { 4, 4, "torch", W },
+			{ 5, 4, "dust" }, { 6, 4, "dust" }, { 7, 4, "dust" }, { 8, 4, "dust" },
+		}), 0)
+		local n = grid.BUTTON_TICKS
+		ref.press(st, grid.index(1, 4))
+		assert(trace(st, {}, port(W, 3), n + 2) == ("1"):rep(n) .. "00")
+		ref.press(st, grid.index(1, 4))
+		assert(trace(st, {}, port(E, 3), n + 3) == "1" .. ("0"):rep(n) .. "11", "torch lags by one tick")
+	end,
+
+	["pressing a nested panel's cell presses everything inside it"] = function()
+		-- Kid: two levers on its east edge. Parent: kid at (2,4), dust to the east edge.
+		local lib = library(
+			{ { 8, 2, "lever" }, { 8, 6, "lever" } },
+			{ { 2, 4, "panel", 0 }, { 3, 4, "dust" }, { 4, 4, "dust" }, { 5, 4, "dust" },
+				{ 6, 4, "dust" }, { 7, 4, "dust" }, { 8, 4, "dust" } }
+		)
+		local st = ref.from_library(lib, 1)
+		assert(trace(st, {}, port(E, 3), 1) == "0")
+		ref.press(st, grid.index(2, 4))
+		assert(trace(st, {}, port(E, 3), 1) == "1")
+		local kid = st.kids[grid.index(2, 4)]
+		assert(kid.switch[grid.index(8, 2)] and kid.switch[grid.index(8, 6)], "both levers flipped")
+	end,
+
+	["a button in a 2x panel lasts half as many ticks"] = function()
+		local lib = library(
+			{ { 8, 4, "button" } },
+			{ { 2, 4, "panel", 0, 2 }, { 3, 4, "dust" }, { 4, 4, "dust" }, { 5, 4, "dust" },
+				{ 6, 4, "dust" }, { 7, 4, "dust" }, { 8, 4, "dust" } }
+		)
+		local st = ref.from_library(lib, 1)
+		local half = math.ceil(grid.BUTTON_TICKS / 2)
+		ref.press(st, grid.index(2, 4))
+		assert(trace(st, {}, port(E, 3), half + 1) == ("1"):rep(half) .. "0")
+	end,
+
 	["XOR matches the prototype's trace"] = function()
 		-- Hand-built XOR from the prototype's filter_test.js ({col, row} -> x, y).
 		local D, B, T = "dust", "block", "torch"

@@ -3,7 +3,9 @@
 --
 -- Inputs and outputs are tables indexed by port 0..31 holding booleans.
 -- One step() is one tick: evaluate everything instant, then advance torches
--- (1 tick), bulbs, and nested panels (speed steps each).
+-- (1 tick), bulbs, buttons, and nested panels (speed steps each).
+--
+-- Face presses go through ref.press() before the step they apply to.
 
 local grid = require("sim.grid")
 local static = require("sim.static")
@@ -11,7 +13,6 @@ local static = require("sim.static")
 local ref = {}
 
 local BITS, PORTS = grid.BITS, grid.PORTS
-local WARMUP_TICKS = 80
 
 local function any_side(out, side)
 	for k = 0, BITS - 1 do
@@ -32,6 +33,9 @@ local function powered(state, src, inputs, net_lit, panel_out, except_pin)
 	for _, t in ipairs(src.torches) do
 		if state.torch[t] then return true end
 	end
+	for _, w in ipairs(src.switches) do
+		if state.switch[w] then return true end
+	end
 	for _, ps in ipairs(src.panels) do
 		if any_side(panel_out[ps.cell], ps.side) then return true end
 	end
@@ -44,22 +48,27 @@ local function desc_bit(state, desc, bit, inputs, net_lit, panel_out)
 	if desc.kind == "pin" then return inputs[desc.pin] == true end
 	if desc.kind == "net" then return net_lit[desc.net] end
 	if desc.kind == "torch" then return state.torch[desc.cell] end
+	if desc.kind == "switch" then return state.switch[desc.cell] end
 	return panel_out[desc.cell][desc.side * BITS + bit] == true
 end
 
 -- library: list of { cells = {...} } indexed by panel id (0-based ids allowed).
 -- Builds a fresh reference panel for library entry `id`, including its
--- nested panels, and runs the power-on warmup.
-function ref.from_library(library, id)
+-- nested panels, and runs the power-on warmup. make_kid(library, id)
+-- optionally builds nested panels some other way (e.g. compiled).
+function ref.from_library(library, id, make_kid)
 	library._static = library._static or {}
 	local S = library._static[id]
 	if not S then
 		S = static.analyze(library[id].cells)
 		library._static[id] = S
 	end
-	local state = ref.new(S, function(kid_id) return ref.from_library(library, kid_id) end)
+	local state = ref.new(S, function(kid_id)
+		if make_kid then return make_kid(library, kid_id) end
+		return ref.from_library(library, kid_id)
+	end)
 	local zero = {}
-	for _ = 1, WARMUP_TICKS do
+	for _ = 1, grid.WARMUP_TICKS do
 		ref.step(state, zero)
 	end
 	return state
@@ -67,8 +76,12 @@ end
 
 -- S: result of static.analyze. make_kid(id): builds a nested panel's state.
 function ref.new(S, make_kid)
-	local state = { S = S, torch = {}, bulb = {}, bulb_prev = {}, kids = {} }
+	local state = { S = S, torch = {}, bulb = {}, bulb_prev = {}, switch = {}, button_left = {}, kids = {} }
 	for _, t in ipairs(S.torches) do state.torch[t] = true end
+	for _, w in ipairs(S.switches) do
+		state.switch[w] = false
+		state.button_left[w] = 0
+	end
 	for _, b in ipairs(S.bulbs) do
 		state.bulb[b] = false
 		state.bulb_prev[b] = false
@@ -110,6 +123,10 @@ function ref.eval(state, inputs)
 		if not changed then break end
 	end
 
+	-- Nested lamps as shown this tick (a fast panel's later steps don't show).
+	local kid_lamps = {}
+	for _, c in ipairs(S.panels) do kid_lamps[c] = ref.lamp_list_any(state.kids[c]) end
+
 	local lit = {}
 	for _, list in ipairs({ S.blocks, S.bulbs, S.lamps }) do
 		for _, b in ipairs(list) do
@@ -126,13 +143,15 @@ function ref.eval(state, inputs)
 			v = powered(state, S.net_src[d.net], inputs, nil, panel_out, p)
 		elseif d and d.kind == "torch" then
 			v = state.torch[d.cell]
+		elseif d and d.kind == "switch" then
+			v = state.switch[d.cell]
 		elseif d and d.kind == "panel" then
 			v = any_side(panel_out[d.cell], d.side)
 		end
 		out[p] = v
 	end
 
-	state.last = { net_lit = net_lit, lit = lit, panel_in = panel_in, panel_out = panel_out }
+	state.last = { net_lit = net_lit, lit = lit, panel_in = panel_in, panel_out = panel_out, kid_lamps = kid_lamps }
 	return out
 end
 
@@ -157,6 +176,14 @@ function ref.step(state, inputs)
 		state.bulb_prev[b] = input
 	end
 
+	-- A button stays on for BUTTON_TICKS steps after its press.
+	for _, w in ipairs(S.switches) do
+		if S.cells[w].kind == "button" and state.button_left[w] > 0 then
+			state.button_left[w] = state.button_left[w] - 1
+			state.switch[w] = state.button_left[w] > 0
+		end
+	end
+
 	for _, c in ipairs(S.panels) do
 		for _ = 1, S.cells[c].speed or 1 do
 			ref.step_any(state.kids[c], last.panel_in[c])
@@ -167,11 +194,41 @@ function ref.step(state, inputs)
 	return out
 end
 
+-- Press face cell `cell` (padded index), or every cell if cell is nil.
+-- A lever flips; a button turns on for BUTTON_TICKS steps, starting with
+-- the next step. Pressing a nested panel's cell presses everything in it.
+function ref.press(state, cell)
+	local S = state.S
+	for _, w in ipairs(S.switches) do
+		if cell == nil or cell == w then
+			if S.cells[w].kind == "lever" then
+				state.switch[w] = not state.switch[w]
+			else
+				state.switch[w] = true
+				state.button_left[w] = grid.BUTTON_TICKS
+			end
+		end
+	end
+	for _, c in ipairs(S.panels) do
+		if cell == nil or cell == c then ref.press_any(state.kids[c], nil) end
+	end
+end
+
 -- Lamp states in S.lamps order, from the last eval.
 function ref.lamps(state)
 	local o = {}
 	for i, b in ipairs(state.S.lamps) do
 		o[i] = state.last and state.last.lit[b] or false
+	end
+	return o
+end
+
+-- Own lamps then each nested panel's (S.panels order), from the last eval.
+-- Same order as a compiled panel's lamps.
+function ref.lamp_list(state)
+	local o = ref.lamps(state)
+	for _, c in ipairs(state.S.panels) do
+		for _, v in ipairs(state.last and state.last.kid_lamps[c] or {}) do o[#o + 1] = v end
 	end
 	return o
 end
@@ -184,6 +241,14 @@ end
 
 function ref.step_any(state, inputs)
 	return (state.runtime or ref).step(state, inputs)
+end
+
+function ref.lamp_list_any(state)
+	return (state.runtime or ref).lamp_list(state)
+end
+
+function ref.press_any(state, cell)
+	return (state.runtime or ref).press(state, cell)
 end
 
 return ref

@@ -2,10 +2,13 @@
 -- ("nets") and records what powers each part. Pure Lua.
 --
 -- A "source list" says what powers something:
---   { pins = {p...}, nets = {n...}, torches = {cell...}, panels = {{cell=, side=}...} }
+--   { pins = {p...}, nets = {n...}, torches = {cell...}, switches = {cell...},
+--     panels = {{cell=, side=}...} }
 -- A "desc" says what sits next to a cell in one direction:
 --   { kind = "pin", pin = p } | { kind = "net", net = n }
---   { kind = "torch", cell = i } | { kind = "panel", cell = i, side = d }
+--   { kind = "torch", cell = i } | { kind = "switch", cell = i }
+--   { kind = "panel", cell = i, side = d }
+-- Buttons and levers ("switches") power all four sides, like a torch with no base.
 
 local grid = require("sim.grid")
 
@@ -100,7 +103,7 @@ function static.analyze(cells)
 	end
 
 	local function new_src()
-		return { pins = {}, nets = {}, torches = {}, panels = {} }
+		return { pins = {}, nets = {}, torches = {}, switches = {}, panels = {} }
 	end
 
 	-- What the neighbour of i in direction d contributes to i.
@@ -118,6 +121,8 @@ function static.analyze(cells)
 		local back = opposite(d)
 		if cell.kind == "torch" and cell.attach ~= back then
 			src.torches[j] = true
+		elseif cell.kind == "button" or cell.kind == "lever" then
+			src.switches[j] = true
 		elseif cell.kind == "panel" then
 			src.panels[j * 4 + back] = true
 		elseif with_nets and (cell.kind == "dust" or cell.kind == "quartz") then
@@ -134,6 +139,7 @@ function static.analyze(cells)
 			pins = sorted_keys(src.pins),
 			nets = sorted_keys(src.nets),
 			torches = sorted_keys(src.torches),
+			switches = sorted_keys(src.switches),
 			panels = panels,
 		}
 	end
@@ -145,7 +151,7 @@ function static.analyze(cells)
 
 	local S = {
 		cells = cells, nets = nets, net_of = net_of, wire_node = wire_node,
-		torches = {}, panels = {}, blocks = {}, bulbs = {}, lamps = {},
+		torches = {}, switches = {}, panels = {}, blocks = {}, bulbs = {}, lamps = {},
 		powered_by = {}, torch_base = {}, panel_side = {}, pin_out = {}, in_pins = {},
 	}
 
@@ -153,6 +159,8 @@ function static.analyze(cells)
 		local k = kind(i)
 		if k == "torch" then
 			table.insert(S.torches, i)
+		elseif k == "button" or k == "lever" then
+			table.insert(S.switches, i)
 		elseif k == "panel" then
 			table.insert(S.panels, i)
 		elseif k == "block" or k == "bulb" or k == "lamp" then
@@ -187,6 +195,8 @@ function static.analyze(cells)
 			return { kind = "net", net = net_of[wire_node(j, toward)] }
 		elseif cell.kind == "torch" then
 			return cell.attach ~= toward and { kind = "torch", cell = j } or nil
+		elseif cell.kind == "button" or cell.kind == "lever" then
+			return { kind = "switch", cell = j }
 		elseif cell.kind == "panel" then
 			return { kind = "panel", cell = j, side = toward }
 		end
@@ -220,6 +230,8 @@ function static.analyze(cells)
 				S.pin_out[p] = { kind = "net", net = net_of[wire_node(q, side)] }
 			elseif cell.kind == "torch" and cell.attach ~= side then
 				S.pin_out[p] = { kind = "torch", cell = q }
+			elseif cell.kind == "button" or cell.kind == "lever" then
+				S.pin_out[p] = { kind = "switch", cell = q }
 			elseif cell.kind == "panel" then
 				S.pin_out[p] = { kind = "panel", cell = q, side = side }
 			end
