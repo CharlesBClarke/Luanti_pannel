@@ -152,7 +152,7 @@ Layers, speed multipliers, coloured and averaged pixels, clay molds and crafting
 
 **Main work and how it is checked**
 
-The main task is porting the compiler and runtime from the JavaScript prototype to Lua while keeping them exactly equivalent. The existing fuzz tests can drive both versions with the same random panels and compare them tick by tick, so the rule that compiling never changes behaviour carries over to the mod.
+The main task is building the compiler and runtime in Lua, using the JavaScript prototype as a starting point rather than a reference to match exactly. Where they differ, this spec decides. Fuzz tests in Lua compare each compiled panel against a plain step-by-step simulation tick by tick, so the rule that compiling never changes behaviour holds in the mod.
 
 **VoxeLibre redstone (decided: in the MVP)**
 

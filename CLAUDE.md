@@ -16,7 +16,8 @@ Spec: @docs/spec.md. It is the source of truth; if code and spec disagree, ask.
 ## Architecture
 - `sim/`: pure Lua (grid, compiler, runtime). **IMPORTANT: no `core.*`, `mesecon`, or other globals in `sim/`** so it runs and is tested under plain LuaJIT. Each file returns a module table.
 - `init.lua` and other root files: engine glue only (nodes, formspecs, mesecons).
-- The Lua compiler/runtime is a port of a JS prototype and must match it tick for tick; equivalence is checked by differential fuzz tests.
+- A JS prototype lives in `prototype/` (gitignored, never commit it). Use it for ideas, not as a reference: the spec decides behavior.
+- Compiled panels must match a plain step-by-step Lua simulation tick for tick; check this with fuzz tests in `tests/`.
 
 ## API references (read these, don't guess)
 - Luanti: https://github.com/luanti-org/luanti/blob/5.17.0/doc/lua_api.md
