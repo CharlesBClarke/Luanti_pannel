@@ -5,6 +5,7 @@ Spec: @docs/spec.md. It is the source of truth; if code and spec disagree, ask.
 ## Commands
 - Unit tests: `luajit tests/run.lua` (specs are `tests/*_spec.lua`, each returns `{name = fn}`)
 - Smoke test: `scripts/smoke.sh` (headless VoxeLibre server, fails on any Lua error in the log)
+- Crosscheck vs JS prototype (optional, local only): `scripts/crosscheck.sh [seed] [trials] [ticks]`. Run after changing `sim/static.lua` or `sim/ref.lua`.
 - Lint: `luacheck .` (not installed yet; needs luarocks)
 - Run both test commands after every change; show their output.
 
