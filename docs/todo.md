@@ -248,6 +248,19 @@ Items, in order of expected payoff:
   layer stays its own panel, and a stack can't be picked up or nested. No
   3D compiler or layer editor; nested designs keep 8 wires per side. The
   spec's Layering section still describes nestable 8-layer blocks.
+- **Graphics rework** (user: faces "look like Lite-Brite"). Replace flat
+  coloured squares with small per-part textures giving a sense of depth
+  (shading, not real geometry): bevelled blocks; torches as a stick with a
+  glowing tip leaning toward their block; copper-dome bulbs; raised buttons
+  and levers showing their state. Dust drawn as a path, like Minecraft dust,
+  running toward the neighbours it really connects to (from the static
+  layout, once per design), dim off and bright on. Visible pins: stubs on
+  the panel edge where an edge cell connects outside. Nested panels drawn
+  as little chips: dark body, legs on the sides whose edges are used, lamps
+  on top. Keep it cheap: faces are already prepared once per design with
+  only live parts swapped (sim/thumb.lua), so use small PNG tiles referenced
+  by the texture string ([combine), not inline pixels, to keep strings and
+  client texture memory small. Mostly art work plus the dust-connection logic.
 7. **Throttling (spec: over budget, slow down).** Measure each connected
    group's cost per step; when the total would go over budget, give groups
    fewer steps per second, whole groups at a time, and show it (infotext or
