@@ -61,7 +61,31 @@ Findings:
   speed multiplies cost directly.
 
 ## Optimizations needed (from the benchmark; rerun scripts/bench.sh after each)
-In order of expected payoff:
+Plan (agreed 2026-10-08), in this order:
+- **First the no-regret ones, 1-3 below:** skip still panels, cheaper faces,
+  less garbage. They help whatever evaluator we end up with. Start with 1.
+- **Then measure activity:** add to scripts/bench.lua the share of nodes whose
+  value changes per step (try the stress designs and the user's "game" panel
+  #48 from world test3 now; the CPU stand-in from item 6 later).
+- **Then pick ONE evaluator, from that number:** event-driven evaluation (below)
+  if a CPU changes under about 10-20% of its nodes per step, else generated
+  Lua code (item 4), or a hybrid. Don't build item 4 before this: the two pull
+  in opposite directions and one would be thrown away.
+
+**Event-driven evaluation** (the candidate for big CPUs): keep each node's
+value from the last step and, per node, the list of nodes that read it. Each
+step, start only from what changed (input bits, presses, registers that
+flipped), recompute the earliest marked node in list order, and mark its
+readers only if its value changed. Cost then follows how much changes, not
+circuit size: a write to one byte of a 256 B RAM touches maybe 100-200 nodes
+instead of ~15k. Trade-off: each recomputed node costs maybe 2-4x more
+(bookkeeping), so a panel where most nodes change every step gets slower;
+fall back to full evaluation when most of a panel changed. Panel-level skip
+(item 1) only helps panels whose inputs don't change, and RAM on a busy bus
+never qualifies, which is why this matters for the CPU goal (spec:
+Performance goals). Fuzz-test it against full evaluation tick for tick.
+
+Items, in order of expected payoff:
 1. **Skip still panels.** runtime.eval runs every node every tick, so an idle
    panel costs as much as a busy one (about 50 ns per node). A panel whose
    inputs equal last tick's, with no press pending and no register changed
