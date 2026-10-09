@@ -95,10 +95,16 @@ In order of expected payoff:
    160 ns per node against about 40 for small nets. Probably wide ORs or
    cache misses; look at fan-in after merge, and flatten nodes into arrays
    (op, args) instead of one table per node.
-6. **Budget and limits (spec open questions).** After 1-3, rerun and pick:
-   a per-tick time budget for all panels (for example 10 ms of the 100 ms
-   tick), a node cap per panel, and what speeds are affordable (cost scales
-   directly with speed). Then decide the layer count.
+6. **Budget and limits: see spec "Performance goals".** Add the reference
+   builds to the benchmark, above all a CHUNGUS-class CPU stand-in in
+   sim/stress.lua (8-bit datapath, 256 B RAM, 4 KB ROM, 32x32 display
+   buffer; estimated 40-60k nodes, to be measured). After 1-3, check that
+   all reference builds fit 15 ms avg / 50 ms max together, then derive the
+   size cap per panel, the default and max speed, and the layer count.
+7. **Throttling (spec: over budget, slow down).** Measure each connected
+   group's cost per step; when the total would go over budget, give groups
+   fewer steps per second, whole groups at a time, and show it (infotext or
+   /panel_bench).
 
 Later: lamps that are on should give off light in the world.
 Smaller fixes from the review that are still worth doing: undo. (Tool

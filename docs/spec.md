@@ -175,6 +175,22 @@ The main task is building the compiler and runtime in Lua, using the JavaScript 
 
 Panels connect to VoxeLibre's existing redstone, so its levers and wires can drive a panel's edges and a panel can drive its lamps and wires. This makes panels useful right away; the cost is a second signal system whose timing must stay consistent with the panels' own.
 
+## Performance goals
+
+Decided 2026-10-08. Limits are derived from these goals, not picked on their own.
+
+- **Who it is for:** a home server with a few friends, not a public server with 20+ players.
+- **The bar: beat a famous redstone CPU.** The reference is CHUNGUS 2 (Sammyuri, 2021): 8-bit, 1 Hz (a 10-redstone-tick cycle, 4-stage pipeline), 7 registers, 256 B RAM, a 64 B data cache, 4 KB of program in 128 B pages, an ALU with multiply, divide and square root, a 32×32 display and an 8-button controller, built about the size of a cruise ship. Its videos were sped up hundreds to thousands of times on a special server; in real play it runs at 1 Hz. A redstone tick is 0.1 s, the same as a panel step at 1×, so the numbers compare directly.
+- **Goal:** a CHUNGUS-class CPU built from panels runs **faster than 1 Hz in real time**, while a few friends play normally on the same server, in a far smaller footprint. Faster comes from the speed setting (at 2×, a 10-step cycle is 2 Hz) and from designs with shorter cycles, since wiring is instant and only torches take a step.
+- **Budget (target, to be confirmed on a modest server CPU):** panels use at most about 15 ms of each 100 ms tick on average, and no tick goes over 50 ms because of panels.
+- **Reference builds** that must fit the budget together, each checked with the benchmark:
+  1. A CHUNGUS-class CPU (built or simulated at its real size) at the speed needed for more than 1 Hz.
+  2. A survival base of about 50 panels, mostly idle, which should cost almost nothing.
+  3. An animated 32×32 display (a 4×4 wall of panels) whose faces change every tick.
+  4. The lights-out game on a 2×2 floor, played by hand.
+- **Over budget, slow down; never refuse or break.** When panels would go over budget, a connected group of panels (a wall, with its nested panels) runs fewer steps per second as a whole. Timing within the group stays exact, so results never change; the machine just runs slower, and players can see that it is throttled. Hard limits apply only at compile time (a size cap per panel), with the cost shown in the tooltip and a clear message from the workbench.
+- **Cost is visible.** A panel's tooltip shows its size and its cost per tick at the current speed, so players can see a limit coming before they hit it.
+
 ## Open questions
 
 These are deliberately left until panels are running in Luanti and can be judged in play.
