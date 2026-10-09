@@ -12,7 +12,7 @@ rm -rf "$world"
 mkdir -p "$world/worldmods"
 ln -sfn "$root" "$world/worldmods/redstone_panels"
 printf 'gameid = mineclone2\nbackend = sqlite3\n' > "$world/world.mt"
-printf 'redstone_panels.smoke_test = true\n' > "$conf"
+printf 'redstone_panels.smoke_test = true\ndedicated_server_step = 0.1\n' > "$conf"
 rm -f "$log"
 
 timeout 90 luanti --server --world "$world" --gameid mineclone2 \

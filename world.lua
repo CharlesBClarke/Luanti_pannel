@@ -17,7 +17,10 @@
 -- input were off, or two edge cells on one side would echo each other's
 -- input back out (and flicker); (2) a side can't tell its own redstone
 -- output from someone else's, so while it drives redstone it ignores
--- redstone input, or two sides could hold each other on.
+-- redstone input, or two sides could hold each other on; (3) when a side
+-- stops driving, mesecons turns the wire off later, from its action queue,
+-- so the side ignores redstone input until that has run and it has read
+-- the wire again.
 
 local sim, library = ...
 local grid, runtime, thumb = sim.grid, sim.runtime, sim.thumb
@@ -61,10 +64,14 @@ local function variant(mask)
 	return mask == 0 and BASE or (BASE .. "_" .. mask)
 end
 
+local function has_bit(m, d)
+	return m % 2 ^ (d + 1) >= 2 ^ d
+end
+
 local function mask_rules(dir, mask)
 	local rules = {}
 	for d = 0, 3 do
-		if mask % 2 ^ (d + 1) >= 2 ^ d then rules[#rules + 1] = SIDES[dir][d] end
+		if has_bit(mask, d) then rules[#rules + 1] = SIDES[dir][d] end
 	end
 	return rules
 end
@@ -72,7 +79,9 @@ end
 local panels = {} -- [hash] = panel record
 local order = {} -- panel records, stable order for ticking
 local links_dirty = true
-local mesecon_in = {} -- [hash][side] = bool, kept even while a panel is inactive
+local mesecon_in = {} -- [hash][side] = bool, kept even while a panel is asleep
+local settling = {} -- [hash][side] = true: stopped driving, wire not read again yet
+local sleeping = {} -- [hash] = pos: loaded but not active, woken when active again
 world.keep_loaded = false -- smoke test: tick panels even without players nearby
 
 local function any_side(out, side)
@@ -171,12 +180,19 @@ local function load_state(P)
 	end
 end
 
+local deactivate
+
 function world.activate(pos)
 	pos = vector.round(pos)
 	local hash = core.hash_node_position(pos)
-	if panels[hash] then return panels[hash] end
 	local node = core.get_node(pos)
 	local id = core.get_meta(pos):get_int("panel_id")
+	local old = panels[hash]
+	if old then
+		if core.get_item_group(node.name, "redstone_panel") > 0 and id == old.id then return old end
+		deactivate(old) -- something else replaced it; its state is not ours
+	end
+	sleeping[hash] = nil
 	local net, err = library.compiled(id)
 	if not net then
 		core.log("warning", ("[redstone_panels] panel at %s: %s"):format(core.pos_to_string(pos), err))
@@ -200,11 +216,24 @@ function world.activate(pos)
 	return P
 end
 
-local function deactivate(P, keep_input)
-	save_state(P)
+-- Forget everything kept for a position whose panel is gone.
+local function forget(hash)
+	mesecon_in[hash], settling[hash], sleeping[hash] = nil, nil, nil
+end
+
+-- With `asleep`, the panel is still there but its block is not active: save
+-- its state and wake it when the block is active again. Otherwise the panel
+-- is gone, replaced or unloaded, and its state is not saved (the position
+-- may hold something else now, or nothing that can be written to).
+function deactivate(P, asleep)
+	if asleep then
+		save_state(P)
+		sleeping[P.hash] = P.pos
+	else
+		forget(P.hash)
+	end
 	if P.entity then P.entity:remove() end
 	panels[P.hash] = nil
-	if not keep_input then mesecon_in[P.hash] = nil end
 	for i, Q in ipairs(order) do
 		if Q == P then
 			table.remove(order, i)
@@ -231,7 +260,8 @@ local function gather(P)
 	for d = 0, 3 do
 		local Q = P.neighbors[d]
 		local opp = grid.opposite(d)
-		local redstone = not Q and mi[d] and P.mask % 2 ^ (d + 1) < 2 ^ d
+		local redstone = not Q and mi[d] and not has_bit(P.mask, d)
+			and not (settling[P.hash] and settling[P.hash][d])
 		for k = 0, BITS - 1 do
 			if Q then
 				inputs[d * BITS + k] = Q.out[opp * BITS + k] == true
@@ -276,13 +306,33 @@ local function set_mask(P, mask)
 	core.swap_node(P.pos, { name = variant(mask), param2 = core.get_node(P.pos).param2 })
 	local on, off = {}, {}
 	for d = 0, 3 do
-		local was, now = old % 2 ^ (d + 1) >= 2 ^ d, mask % 2 ^ (d + 1) >= 2 ^ d
+		local was, now = has_bit(old, d), has_bit(mask, d)
 		if now and not was then on[#on + 1] = SIDES[P.dir][d] end
-		if was and not now then off[#off + 1] = SIDES[P.dir][d] end
+		if was and not now then
+			off[#off + 1] = SIDES[P.dir][d]
+			settling[P.hash] = settling[P.hash] or {}
+			settling[P.hash][d] = true
+		end
 	end
 	if #on > 0 then mesecon.receptor_on(P.pos, on) end
-	if #off > 0 then mesecon.receptor_off(P.pos, off) end
+	if #off > 0 then
+		mesecon.receptor_off(P.pos, off)
+		-- Priority 0 runs after receptor_off (priority 1) in the same queue step.
+		mesecon.queue:add_action(P.pos, "redstone_panels_settled", {}, nil, { "redstone_panels_settled" }, 0)
+	end
 end
+
+-- Rule (3): mesecons has turned the wire off, unless something else still
+-- powers it. Either way, the wire now tells the truth.
+mesecon.queue:add_function("redstone_panels_settled", function(pos)
+	local hash = core.hash_node_position(pos)
+	local sides, node = settling[hash], core.get_node_or_nil(pos)
+	settling[hash] = nil
+	if not (sides and node and mesecon_in[hash]) then return end
+	for d in pairs(sides) do
+		mesecon_in[hash][d] = mesecon.is_powered(pos, SIDES[node_dir(node)][d]) and true or false
+	end
+end)
 
 local tick_count = 0
 local bench = { times = {}, next = 1 }
@@ -300,6 +350,16 @@ local function tick()
 				deactivate(P)
 			elseif not world.keep_loaded and not core.compare_block_status(P.pos, "active") then
 				deactivate(P, true)
+			end
+		end
+		-- The LBM only runs when a block loads, so wake sleepers here. An
+		-- unloaded one is left to the LBM.
+		for hash, pos in pairs(sleeping) do
+			local node = core.get_node_or_nil(pos)
+			if not node or core.get_item_group(node.name, "redstone_panel") == 0 then
+				forget(hash)
+			elseif world.keep_loaded or core.compare_block_status(pos, "active") then
+				world.activate(pos)
 			end
 		end
 	end
@@ -415,8 +475,9 @@ for mask = 0, 15 do
 			world.activate(pos)
 		end,
 		after_dig_node = function(pos, _oldnode, oldmeta, digger)
-			local P = panels[core.hash_node_position(pos)]
-			if P then deactivate(P) end
+			local hash = core.hash_node_position(pos)
+			if panels[hash] then deactivate(panels[hash]) end
+			forget(hash)
 			local id = tonumber(oldmeta.fields and oldmeta.fields.panel_id)
 			if id and library.get(id) then core.handle_node_drops(pos, { library.item(id) }, digger) end
 		end,

@@ -25,6 +25,8 @@ local function design(list)
 	return cells
 end
 
+local sleep_and_wake
+
 local function run()
 	world.keep_loaded = true
 	for x = -6, 6 do
@@ -148,8 +150,52 @@ local function run()
 		if not check(wname:find("_on$") ~= nil, "wire after panel B is not powered: " .. wname) then return end
 		local bench = world.bench()
 		core.log("action", ("[redstone_panels] bench: %d panels, %.3f ms avg tick"):format(bench.panels, bench.avg_ms))
-		core.log("action", "[redstone_panels] smoke test OK")
-		core.request_shutdown("smoke test done", false, 0)
+
+		-- Lever off: once B stops driving, the wire it powered must not
+		-- echo back into B and light its lamp while mesecons catches up.
+		sim.runtime.press(A.state, grid.index(8, 4))
+		local echoed, watching = false, true
+		local function watch()
+			if watching and B.mask == 0 and sim.runtime.lamp_list(B.state)[1] then echoed = true end
+		end
+		core.register_globalstep(watch)
+		core.after(SETTLE_SECONDS, function()
+			watching = false
+			if not check(not echoed, "panel B read its own redstone back after it stopped driving") then return end
+			if not check(not sim.runtime.lamp_list(B.state)[1], "lamp on panel B stayed lit") then return end
+			wname = core.get_node(wire).name
+			if not check(wname:find("_off$") ~= nil, "wire after panel B stayed powered: " .. wname) then return end
+			sleep_and_wake(A, pa)
+		end)
+	end)
+end
+
+-- Without players no block is active, so panels fall asleep once
+-- keep_loaded is off, and must wake by themselves (not only on block load)
+-- with their state.
+sleep_and_wake = function(A, pa)
+	sim.runtime.press(A.state, grid.index(8, 4)) -- lever on again, to see it survive
+	core.after(SETTLE_SECONDS, function()
+		world.keep_loaded = false
+	end)
+	core.after(2 * SETTLE_SECONDS, function()
+		local hash = core.hash_node_position(pa)
+		if not check(world.panels[hash] == nil, "panel A should be asleep with no players near") then return end
+		world.keep_loaded = true
+		core.after(SETTLE_SECONDS, function()
+			local woken = world.panels[hash]
+			if not check(woken ~= nil and woken ~= A, "panel A did not wake up") then return end
+			if not check(sim.runtime.probes(woken.state)[1] == true, "panel A's lever lost its state while asleep") then
+				return
+			end
+			-- A different panel in the same spot is a new panel, not the old one.
+			local other = assert(library.add(design({ { 1, 1, { kind = "lever" } } }), "other", "smoke"))
+			core.get_meta(pa):set_int("panel_id", other)
+			local replaced = world.activate(pa)
+			if not check(replaced and replaced.id == other, "activate returned the replaced panel") then return end
+			core.log("action", "[redstone_panels] smoke test OK")
+			core.request_shutdown("smoke test done", false, 0)
+		end)
 	end)
 end
 

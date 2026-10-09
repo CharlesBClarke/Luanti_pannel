@@ -53,14 +53,14 @@ explain torch attachment.
 Planned: fix 1-4 and 7-9 now, 5 together with the floor placement work, and for 6 reuse
 the existing entry when a design is identical.
 
-1. **Panels freeze after you walk away and come back** (world.lua ~350). The tick
+1. FIXED: **Panels freeze after you walk away and come back** (world.lua ~350). The tick
    loop deactivates a panel whose block is loaded but not active. The LBM only
    fires on load, so the panel never starts again until the block unloads or
    someone right-clicks it.
-2. **Self-echo after an output turns off** (world.lua ~309). `set_mask` clears the
+2. FIXED: **Self-echo after an output turns off** (world.lua ~309). `set_mask` clears the
    output bit at once, but mesecons sends the "off" back through its action
    queue later. For a tick or more the panel reads its own old signal as input.
-3. **Saving writes a removed panel's state onto whatever replaced it** (world.lua
+3. FIXED: **Saving writes a removed panel's state onto whatever replaced it** (world.lua
    ~279). `deactivate` always calls `save_state`, even when the node is gone or is
    a different panel. `world.activate` also returns the stale old panel for that
    position until the next check.
@@ -73,5 +73,5 @@ the existing entry when a design is identical.
    an identical design, and rewrites the whole library to storage each time.
 7. FIXED: The editor's reach limit (`> 10`, editor.lua ~166) should be a named constant.
 8. `face_texture` hardcodes an `[fill:8x8` base; use `grid.SIZE` (world.lua ~173).
-9. The bit test `m % 2^(d+1) >= 2^d` is copied three times in world.lua; make a
+9. FIXED: The bit test `m % 2^(d+1) >= 2^d` is copied three times in world.lua; make a
    `has_bit` helper.
