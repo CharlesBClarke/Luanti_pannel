@@ -9,6 +9,9 @@
 --   wave:          press a cell and a ring of light spreads out from it,
 --                  each pixel lit for about a second. Boards side by side
 --                  carry the wave across.
+--   rgb cycle:     every cell is a 3-bit counter with a red, a green and a
+--                  blue lamp, so it steps through 8 colors; the order of the
+--                  colors changes along the diagonals.
 --   clock tower:   tens of billions of torches in nested clocks, which the
 --                  compiler merges down to a couple of gates.
 
@@ -69,6 +72,14 @@ local function cells_with(ids, list)
 		else
 			cells[I(e[1], e[2])] = { kind = e[3], attach = e[4] }
 		end
+	end
+	return cells
+end
+
+-- Color every lamp in `cells`.
+local function lamps_colored(cells, color)
+	for _, cell in pairs(cells) do
+		if cell.kind == "lamp" then cell.color = color end
 	end
 	return cells
 end
@@ -242,6 +253,28 @@ demos.DESIGNS = {
 
 	{ name = "tower 0", cells = function() return cells_of(TICK) end },
 }
+
+-- RGB Cycle: a counter bit per color, then one 3-bit pixel per order of
+-- the colors (the first color is the fastest bit).
+local RGB = { "red", "green", "blue" }
+local RGB_ORDERS = { { 1, 2, 3 }, { 2, 3, 1 }, { 3, 1, 2 }, { 1, 3, 2 }, { 3, 2, 1 }, { 2, 1, 3 } }
+for _, color in ipairs(RGB) do
+	local add = function(d) demos.DESIGNS[#demos.DESIGNS + 1] = d end
+	add({ name = "rgb clock bit " .. color, cells = function() return lamps_colored(cells_of(BIT_CLOCK), color) end })
+	add({ name = "rgb bit " .. color, cells = function() return lamps_colored(cells_of(BIT_EAST), color) end })
+end
+for k, order in ipairs(RGB_ORDERS) do
+	demos.DESIGNS[#demos.DESIGNS + 1] = { name = "rgb pixel " .. k, cells = function(ids)
+		return cells_with(ids, {
+			{ 3, 4, "panel", "rgb clock bit " .. RGB[order[1]] },
+			{ 4, 4, "panel", "rgb bit " .. RGB[order[2]] },
+			{ 5, 4, "panel", "rgb bit " .. RGB[order[3]] },
+		})
+	end }
+end
+demos.DESIGNS[#demos.DESIGNS + 1] = { name = "RGB Cycle", show = true, cells = function(ids)
+	return fill(function(x, y) return nest(ids["rgb pixel " .. ((x + y) % #RGB_ORDERS + 1)]) end)
+end }
 for level = 1, demos.TOWER_LEVELS do
 	demos.DESIGNS[#demos.DESIGNS + 1] = { name = "tower " .. level, cells = function(ids)
 		return fill(function() return nest(ids["tower " .. (level - 1)]) end)

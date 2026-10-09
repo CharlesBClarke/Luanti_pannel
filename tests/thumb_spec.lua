@@ -30,13 +30,19 @@ end
 local function plain_face(cells, net, lamps, probes, cell_px)
 	local colors, inner, live = {}, {}, thumb.LIVE
 	for j, c in ipairs(net.probe_cells) do colors[c] = live[cells[c].kind][probes[j] and 2 or 1] end
-	local lit = {}
+	local full, lit = {}, {}
 	for j, on in ipairs(lamps) do
-		local c = net.lamp_cells[j]
-		lit[c] = lit[c] or on
+		local c, w = net.lamp_cells[j], net.lamp_rgb[j]
+		full[c], lit[c] = full[c] or { 0, 0, 0 }, lit[c] or { 0, 0, 0 }
+		for ch = 1, 3 do
+			full[c][ch] = full[c][ch] + w[ch]
+			if on then lit[c][ch] = lit[c][ch] + w[ch] end
+		end
 	end
-	for c, on in pairs(lit) do
-		local color = live.lamp[on and 2 or 1]
+	for c, f in pairs(full) do
+		local l = lit[c]
+		local color = thumb.lamp_color(f, thumb.lamp_level(l[1], f[1]), thumb.lamp_level(l[2], f[2]),
+			thumb.lamp_level(l[3], f[3]))
 		if cells[c].kind == "panel" then inner[c] = color else colors[c] = color end
 	end
 	return thumb.texture(cells, { cell_px = cell_px, colors = colors, inner = inner })
@@ -50,6 +56,28 @@ local function rng(seed)
 end
 
 local KINDS = { "dust", "dust", "block", "bulb", "lamp", "lamp", "quartz", "torch", "button", "lever" }
+local LAMP_COLORS = { false, "red", "green", "blue", "orange", "black" }
+
+-- The face of library design `id` with lamps lit[j] lit (in net.lamps order).
+local function face_of(lib, id, lit)
+	local net = compile.from_library(lib, id)
+	local lamps = {}
+	for j = 1, #net.lamps do lamps[j] = lit[j] == true end
+	return thumb.face_texture(thumb.face(lib[id].cells, net, 6), lamps, {}), net
+end
+
+-- The lamp weights of net's lamps in cell c, in order.
+local function weights_in(net, c)
+	local list = {}
+	for j, cell in ipairs(net.lamp_cells) do
+		if cell == c then list[#list + 1] = net.lamp_rgb[j] end
+	end
+	return list
+end
+
+local function near(a, b)
+	return math.abs(a - b) < 1e-9
+end
 
 local function count(s, pattern)
 	local n = 0
@@ -72,6 +100,87 @@ return {
 		assert(tex:find(("[fill:%dx%d:%d,%d:%s"):format(px, px, 1 + 2 * stride, 1 + stride, thumb.COLORS.panel),
 			1, true), "panel at 3,2")
 		assert(count(tex, thumb.COLORS.dust) == 1)
+	end,
+
+	["thumbnail colors lamps by their color"] = function()
+		local tex = thumb.texture(design({ { 1, 1, { kind = "lamp", color = "blue" } }, { 2, 1, { kind = "lamp" } } }))
+		assert(tex:find(thumb.cell_color({ kind = "lamp", color = "blue" }), 1, true))
+		assert(thumb.cell_color({ kind = "lamp", color = "blue" }):match("^#0000%x%x$"))
+		assert(tex:find(thumb.cell_color({ kind = "lamp" }), 1, true))
+	end,
+
+	["own lamps add their color; plain lamps look as before"] = function()
+		local net = compile.panel(design({ { 2, 2, { kind = "lamp", color = "red" } }, { 3, 2, { kind = "lamp" } } }))
+		local red = weights_in(net, grid.index(2, 2))[1]
+		assert(red[1] == 1 and red[2] == 0 and red[3] == 0)
+		assert(weights_in(net, grid.index(3, 2))[1] == grid.PLAIN_LAMP)
+	end,
+
+	["nested pixels average each color over the cells that have it"] = function()
+		-- 4 red lamps, 1 green, 1 white: red is shared 5 ways (white has red
+		-- too), green 2 ways, blue only by white.
+		local kid = {}
+		for x = 1, 4 do kid[#kid + 1] = { x, 1, { kind = "lamp", color = "red" } } end
+		kid[#kid + 1] = { 1, 2, { kind = "lamp", color = "green" } }
+		kid[#kid + 1] = { 2, 2, { kind = "lamp", color = "white" } }
+		local lib = { { cells = design(kid) },
+			{ cells = design({ { 5, 5, { kind = "panel", id = 1, speed = 1 } } }) } }
+		local net = compile.from_library(lib, 2)
+		local w = weights_in(net, grid.index(5, 5))
+		assert(#w == 6)
+		local sum = { 0, 0, 0 }
+		for _, v in ipairs(w) do
+			for ch = 1, 3 do sum[ch] = sum[ch] + v[ch] end
+		end
+		assert(near(sum[1], 1) and near(sum[2], 1) and near(sum[3], 1), "all lit is full brightness")
+		-- Own lamps in S.lamps order: cell index order, so row 1 then row 2.
+		assert(near(w[1][1], 1 / 5) and w[1][2] == 0)
+		assert(near(w[5][2], 1 / 2) and w[5][1] == 0)
+		assert(near(w[6][1], 1 / 5) and near(w[6][2], 1 / 2) and near(w[6][3], 1))
+	end,
+
+	["averaging nests: each cell counts once, however many lamps it holds"] = function()
+		-- Panel 1: 4 red lamps. Panel 2: panel 1 next to one red lamp.
+		-- Panel 3 shows panel 2: panel 1's lamps are 1/8 each, the lone lamp 1/2.
+		local four = {}
+		for x = 1, 4 do four[#four + 1] = { x, 1, { kind = "lamp", color = "red" } } end
+		local lib = {
+			{ cells = design(four) },
+			{ cells = design({ { 1, 1, { kind = "panel", id = 1, speed = 1 } }, { 3, 3, { kind = "lamp", color = "red" } } }) },
+			{ cells = design({ { 4, 4, { kind = "panel", id = 2, speed = 1 } } }) },
+		}
+		local net = compile.from_library(lib, 3)
+		local w = weights_in(net, grid.index(4, 4))
+		assert(#w == 5)
+		-- Panel 2 lists its own lamp first, then panel 1's.
+		assert(near(w[1][1], 1 / 2))
+		for k = 2, 5 do assert(near(w[k][1], 1 / 8)) end
+	end,
+
+	["face: one lit lamp of four shows a quarter, and red plus green is yellow"] = function()
+		local kid = {}
+		for x = 1, 4 do kid[#kid + 1] = { x, 1, { kind = "lamp", color = "red" } } end
+		local lib = { { cells = design(kid) },
+			{ cells = design({ { 5, 5, { kind = "panel", id = 1, speed = 1 } } }) },
+			{ cells = design({ { 1, 1, { kind = "lamp", color = "red" } }, { 2, 1, { kind = "lamp", color = "green" } } }) },
+			{ cells = design({ { 5, 5, { kind = "panel", id = 3, speed = 1 } } }) } }
+		local L = thumb.LAMP_LEVELS
+		local tex = face_of(lib, 2, { true })
+		assert(tex:find(thumb.lamp_color({ 1, 0, 0 }, L / 4, 0, 0), 1, true), "a quarter red")
+		tex = face_of(lib, 2, { true, true, true, true })
+		assert(tex:find(thumb.lamp_color({ 1, 0, 0 }, L, 0, 0), 1, true), "full red")
+		tex = face_of(lib, 4, { true, true })
+		assert(tex:find(thumb.lamp_color({ 1, 1, 0 }, L, L, 0), 1, true), "yellow")
+		assert(thumb.lamp_color({ 1, 1, 0 }, L, L, 0) == "#ffff00")
+		tex = face_of(lib, 4, { true, false })
+		assert(tex:find(thumb.lamp_color({ 1, 1, 0 }, L, 0, 0), 1, true), "red, green dim")
+	end,
+
+	["face: any light at all shows"] = function()
+		assert(thumb.lamp_level(0, 1) == 0)
+		assert(thumb.lamp_level(0.01, 1) == 1)
+		assert(thumb.lamp_level(1, 1) == thumb.LAMP_LEVELS)
+		assert(thumb.lamp_level(0, 0) == 0)
 	end,
 
 	["edges: dust straight across reads and drives both ends"] = function()
@@ -103,7 +212,9 @@ return {
 							cells[grid.index(x, y)] = { kind = "panel", id = 1, speed = 1 }
 						elseif r < 0.6 then
 							local kind = KINDS[math.floor(rnd() * #KINDS) + 1]
-							cells[grid.index(x, y)] = { kind = kind, attach = kind == "torch" and math.floor(rnd() * 4) or nil }
+							local color = kind == "lamp" and LAMP_COLORS[math.floor(rnd() * #LAMP_COLORS) + 1] or nil
+							cells[grid.index(x, y)] = { kind = kind, attach = kind == "torch" and math.floor(rnd() * 4) or nil,
+								color = color or nil }
 						end
 					end
 				end

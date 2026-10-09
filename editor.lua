@@ -33,6 +33,12 @@ local PART_ITEMS = {
 }
 local PALETTE_ORDER = { "dust", "block", "torch", "quartz", "bulb", "lamp", "button", "lever" }
 local PART_OF = {} -- [item name] = part; filled once aliases are known
+-- Dyed lamps (VoxeLibre has one per dye) make colored lamps, grid.LAMP_COLORS.
+local COLORED_LAMP = "mesecons_lightstone:lightstone_off_"
+local LAMP_COLOR_OF = {} -- [item name] = color; filled once items are known
+local PALETTE_LAMPS = { "red", "green", "blue" } -- colored lamps in the creative palette
+local PALETTE_COLUMNS = 4
+local PALETTE_SLOTS = #PALETTE_ORDER + #PALETTE_LAMPS + 1 -- parts, colored lamps, a blank panel
 
 -- Item stacks carry the real name, not an alias (mesecons:redstone is one).
 local function resolve(item)
@@ -72,6 +78,10 @@ end
 -- The item a cell is made of.
 local function item_for(cell)
 	if cell.kind == "panel" then return library.get(cell.id) and library.item(cell.id) or ItemStack("") end
+	-- A color this game has no dyed lamp for (design from elsewhere) comes back as a plain lamp.
+	if cell.kind == "lamp" and cell.color and core.registered_items[resolve(COLORED_LAMP .. cell.color)] then
+		return ItemStack(COLORED_LAMP .. cell.color)
+	end
 	return ItemStack(PART_ITEMS[cell.kind])
 end
 
@@ -79,6 +89,8 @@ end
 local function cell_for(stack)
 	local id = library.item_id(stack)
 	if id then return { kind = "panel", id = id, speed = 1 } end
+	local color = LAMP_COLOR_OF[stack:get_name()]
+	if color then return { kind = "lamp", color = color } end
 	local kind = PART_OF[stack:get_name()]
 	return kind and { kind = kind } or nil
 end
@@ -176,7 +188,7 @@ function editor.formspec(pos, status, creative)
 	local inv_loc = ("nodemeta:%d,%d,%d"):format(pos.x, pos.y, pos.z)
 	local fs = {
 		"formspec_version[6]",
-		"size[16.5,17.4]",
+		("size[%f,17.4]"):format(creative and 17.75 or 16.5), -- creative adds the trash slot
 		"label[0.5,0.5;" .. core.formspec_escape(loaded
 			and "Drag parts into the grid. The outer ring connects to neighbouring panels."
 			or "Put a blank or compiled panel in the slot to start.") .. "]",
@@ -211,8 +223,13 @@ function editor.formspec(pos, status, creative)
 		.. "Take it out and put it back to move it to the next one."))
 	if creative then
 		fs[#fs + 1] = ("label[%f,%f;Parts (creative)]"):format(PX, GY + 5.8)
-		fs[#fs + 1] = slot_bg(PX, GY + 6.2, 3, 3)
-		fs[#fs + 1] = ("list[detached:%s;parts;%f,%f;3,3;]"):format(PALETTE, PX, GY + 6.2)
+		local rows = math.ceil(PALETTE_SLOTS / PALETTE_COLUMNS)
+		fs[#fs + 1] = slot_bg(PX, GY + 6.2, PALETTE_COLUMNS, rows)
+		fs[#fs + 1] = ("list[detached:%s;parts;%f,%f;%d,%d;]"):format(PALETTE, PX, GY + 6.2, PALETTE_COLUMNS, rows)
+		local tx = PX + PALETTE_COLUMNS * SLOT_STEP
+		fs[#fs + 1] = ("label[%f,%f;Delete]"):format(tx, GY + 5.8)
+		fs[#fs + 1] = slot_bg(tx, GY + 6.2, 1, 1)
+		fs[#fs + 1] = ("list[detached:%s;trash;%f,%f;1,1;]"):format(PALETTE, tx, GY + 6.2)
 	end
 	if status then fs[#fs + 1] = ("label[%f,%f;%s]"):format(GX, GY + SIZE * SLOT_STEP + 0.1, core.formspec_escape(status)) end
 
@@ -450,17 +467,23 @@ core.register_node("redstone_panels:panel", {
 	end,
 })
 
--- Creative players take parts from here for free, and can drop items on it to delete them.
+-- Creative players take parts from here for free, and drop items in the
+-- trash slot to delete them. Parts slots refuse drops: they are full, so the
+-- client would try a swap that the server rejects, leaving a ghost stack held.
 local palette = core.create_detached_inventory(PALETTE, {
-	allow_take = function(_inv, _listname, _index, _stack, player)
-		return is_creative(player) and -1 or 0
+	allow_take = function(_inv, listname, _index, _stack, player)
+		return listname == "parts" and is_creative(player) and -1 or 0
 	end,
-	allow_put = function(_inv, _listname, _index, _stack, player)
-		return is_creative(player) and -1 or 0
+	allow_put = function(_inv, listname, _index, stack, player)
+		return listname == "trash" and is_creative(player) and stack:get_count() or 0
+	end,
+	on_put = function(inv, listname, index)
+		inv:set_stack(listname, index, ItemStack(""))
 	end,
 	allow_move = function() return 0 end,
 })
-palette:set_size("parts", 9)
+palette:set_size("parts", PALETTE_SLOTS)
+palette:set_size("trash", 1)
 
 -- A full stack, so shift-click hands out as many as fit in one slot.
 local function full_stack(item)
@@ -471,13 +494,19 @@ end
 
 core.register_on_mods_loaded(function()
 	for kind, item in pairs(PART_ITEMS) do PART_OF[resolve(item)] = kind end
+	for color in pairs(grid.LAMP_COLORS) do
+		local item = resolve(COLORED_LAMP .. color)
+		if core.registered_items[item] then LAMP_COLOR_OF[item] = color end
+	end
 	local k = 0
-	for _, kind in ipairs(PALETTE_ORDER) do
-		if core.registered_items[resolve(PART_ITEMS[kind])] then
+	local function offer(item)
+		if core.registered_items[resolve(item)] then
 			k = k + 1
-			palette:set_stack("parts", k, full_stack(PART_ITEMS[kind]))
+			palette:set_stack("parts", k, full_stack(item))
 		end
 	end
+	for _, kind in ipairs(PALETTE_ORDER) do offer(PART_ITEMS[kind]) end
+	for _, color in ipairs(PALETTE_LAMPS) do offer(COLORED_LAMP .. color) end
 	palette:set_stack("parts", k + 1, full_stack(BLANK))
 
 	-- Survival recipes, only where the ingredients exist.

@@ -35,7 +35,7 @@ Six items make up a panel, and none of them is ever rotated by the player. Every
 | Torch | The block or bulb it stands on | Its other three sides: dust, quartz, blocks, the edge, a neighbour panel's side | Off while its block is powered, 1 tick later. Must stand on a block or bulb; falls off if that is removed. |
 | Quartz | Dust or torches at its sides | Every other quartz in its row, column, and the same spot in other layers | Wireless. Left/right signals travel the row; top/bottom signals travel the column; the two never mix. |
 | Copper bulb | Anything touching it, like a block | Nothing directly | Flips on or off each time its input turns on. A torch standing on it reads it. Memory with no rotation. |
-| Lamp | Anything touching it | Nothing | Lights when powered. Display only; acts as a pixel on the block face. |
+| Lamp | Anything touching it | Nothing | Lights when powered. Display only; acts as a pixel on the block face. Plain or any of VoxeLibre's 16 dyed colors. |
 
 **Torch placement.** When a torch touches more than one block or bulb, tapping it again moves it to the next one. Dropping it near a cell's edge picks the block on that side.
 
@@ -86,6 +86,9 @@ Buttons, levers, and lamps form the panel's face: what a player sees and presses
 - **One press per cell.** Pressing a cell triggers every input at that position. A lever flips its state; a button turns on for a few ticks, then off. A button and lever in the same cell both react; the editor does not forbid it.
 - **Bounded inputs.** A board has at most 64 press inputs, one per cell, and a nested panel needs only one: "my cell was pressed".
 - **Pixels average.** A cell's brightness per color is the fraction of that color's lamps that are lit, averaged up through nesting. A color with no lamps contributes nothing. Red, green, and blue lamps make RGB pixels.
+  - Colors are red, green, and blue channels. A lamp adds its own color to its pixel when lit (a plain lamp is warm yellow, a red one pure red, an orange one red plus half green, and so on).
+  - A nested panel's pixel is, per channel, the average of its cells that have that channel, so each cell counts once however many lamps sit inside it. One red lamp lit gives full red; one of four lit gives a quarter. Channels then add: red plus green lit is yellow.
+  - Each channel shows in 4 brightness steps (a tunable), rounded up, so one lit lamp among many never disappears. An unlit pixel shows a dim version of its color.
 - **Logic is untouched.** Lamps only produce light, and presses are ordinary inputs, so face IO never changes how wiring or the compiler works.
 
 ## Speed
@@ -134,7 +137,7 @@ In the world, a panel is a block with one face showing the grid, built as a Luan
 - **Building UI.** Designing is Minecraft-style: the grid is 64 slots, like a chest, and players drag parts into it from their own inventory and drag them off to remove them. A free palette of parts is for creative mode only.
   - **Parts are used up** when placed in the grid; taking one out gives it back. A compiled panel holds its parts, so loading it into the workbench gives access to them as real items.
   - **Torches** pick a block or bulb next to them to stand on; picking a torch up and dropping it again picks the next one. It has to leave the cell and come back (Luanti never tells the server about a drop on the same slot). A torch whose block is taken away moves to another one next to it, or falls off back into the player's inventory.
-  - **One item per part:** redstone dust, stone (block), redstone torch, nether quartz, redstone lamp, stone button, lever, and a Copper Bulb item from this mod (VoxeLibre has none). Taking a part out gives back exactly the item that went in.
+  - **One item per part:** redstone dust, stone (block), redstone torch, nether quartz, redstone lamp (plain or dyed: a dyed lamp is a colored lamp), stone button, lever, and a Copper Bulb item from this mod (VoxeLibre has none). Taking a part out gives back exactly the item that went in.
   - **The workbench holds its panel.** It can't be dug while a panel is in the slot, so parts are never lost or duplicated.
   - **Nested panels may turn** (an idea, not decided) in 90° steps, like panels turned in the world. Turning a nested panel turns its sides: its north edge can face any side of the parent cell, bits in order along the edge. The compiler supports it (a `turn` of 0–3 quarter turns clockwise on the nested cell); there is no UI for it yet.
 - **Workbench loads a panel.** The workbench has one panel slot and holds no design of its own. A blank panel opens an empty grid; a compiled panel loads its design, so any panel can be opened to see how it works. Taking the panel out compiles it: unchanged, it comes back as the same panel; edited, it becomes a new library entry and replaces the item in the slot, while panels already using the old design keep working. If compiling fails, the panel stays in the slot and the error shows in the workbench. A **Dupe** button copies the panel in the slot, so keeping the original before editing means duping it first. Dupe is creative-only. The name carries over and can be edited.
@@ -165,7 +168,7 @@ The first version is the smallest thing that runs in VoxeLibre and tells us what
 
 **Out of scope for now**
 
-Wall and ceiling placement, layers, speeds above 1×, coloured and averaged pixels, clay molds and crafting costs, and copy protection. Each of these sits on top of the core without changing it, and their limits should come from the benchmark anyway.
+Wall and ceiling placement, layers, speeds above 1×, clay molds and crafting costs, and copy protection. Each of these sits on top of the core without changing it, and their limits should come from the benchmark anyway.
 
 **Main work and how it is checked**
 
@@ -191,6 +194,17 @@ Decided 2026-10-08. Limits are derived from these goals, not picked on their own
 - **Over budget, slow down; never refuse or break.** When panels would go over budget, a connected group of panels (a wall, with its nested panels) runs fewer steps per second as a whole. Timing within the group stays exact, so results never change; the machine just runs slower, and players can see that it is throttled. Hard limits apply only at compile time (a size cap per panel), with the cost shown in the tooltip and a clear message from the workbench.
 - **Cost is visible.** A panel's tooltip shows its size and its cost per tick at the current speed, so players can see a limit coming before they hit it.
 
+## Stretch goals
+
+Ideas for after the MVP, not decided. Each must sit on top of the core without changing it.
+
+- **More peripherals.** More face IO beyond buttons, levers, and lamps. Like those, each one is an ordinary input or output (a press, a bit read, a pixel), so the compiler and timing stay untouched, and each rises to its parent cell when nested. Candidates:
+  - **Pressure plate:** on when a player or mob stands on that cell of a floor panel.
+  - **Note block:** plays a note when its input turns on (sound output).
+  - **Sensors:** daylight, a player nearby, or the panel's own block being in water or lava.
+  - **Keypad or text input:** a press that carries a number or a character as several bits at once.
+  - **Item IO:** read or count items in a neighbouring hopper or chest, or push one out.
+
 ## Open questions
 
 These are deliberately left until panels are running in Luanti and can be judged in play.
@@ -199,7 +213,7 @@ These are deliberately left until panels are running in Luanti and can be judged
 
 - [ ] Layer count: the target is 8 per block (an 8×8×8 cube of 512 cells), to be confirmed by the performance budget.
 - [ ] Does the block's back face expose its quartz depth links so stacks of blocks chain front-to-back, or does depth stay sealed inside each block?
-- [ ] How many brightness levels per color: Luanti node colors usually come from a palette (often 256 entries), so pixels will need rounding, e.g. 4 levels per channel for 64 colors.
+- [x] How many brightness levels per color: 4 steps per channel for now (faces are texture strings, not a palette, so this only limits how many distinct face textures a client caches). Revisit after seeing it in game.
 - [ ] Default and maximum for the speed setting, and a per-area budget, once benchmarked.
 - [ ] Can players copy any panel they hold by stamping it, or can designs be signed or protected?
 - [ ] Should two neighbouring panels in the same plane but turned differently (e.g. one rotated 90° on the floor) connect, and if so in which bit order?

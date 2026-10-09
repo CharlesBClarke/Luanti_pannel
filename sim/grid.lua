@@ -9,6 +9,7 @@
 --
 -- A cell is nil (empty) or a table:
 --   { kind = "dust" | "block" | "quartz" | "bulb" | "lamp" | "button" | "lever" }
+--   { kind = "lamp", color = name }          -- a colored lamp (grid.LAMP_COLORS)
 --   { kind = "torch", attach = d }           -- stands on the cell in direction d
 --   { kind = "panel", id = k, speed = n, turn = r }
 --       a compiled panel from the library, turned r quarter turns clockwise
@@ -23,6 +24,23 @@ grid.PORTS = 4 * grid.SIZE
 grid.BUTTON_TICKS = 10
 -- Ticks run from the starting state before a panel counts as powered on.
 grid.WARMUP_TICKS = 80
+
+-- Light of a lit lamp, { r, g, b } from 0 to 1. A plain lamp is warm yellow;
+-- colored lamps are VoxeLibre's dyed lamps. Red, green and blue are pure so
+-- they mix into RGB pixels.
+grid.PLAIN_LAMP = { 1, 0.82, 0.25 }
+grid.LAMP_COLORS = {
+	white = { 1, 1, 1 }, silver = { 0.7, 0.7, 0.7 }, grey = { 0.4, 0.4, 0.4 }, black = { 0.12, 0.12, 0.12 },
+	red = { 1, 0, 0 }, green = { 0, 1, 0 }, blue = { 0, 0, 1 },
+	yellow = { 1, 1, 0 }, cyan = { 0, 1, 1 }, magenta = { 1, 0, 1 },
+	orange = { 1, 0.5, 0 }, lime = { 0.5, 1, 0 }, lightblue = { 0.4, 0.7, 1 },
+	purple = { 0.55, 0.15, 1 }, pink = { 1, 0.55, 0.7 }, brown = { 0.5, 0.3, 0.12 },
+}
+
+-- Light of a lamp cell when lit.
+function grid.lamp_rgb(cell)
+	return cell.color and grid.LAMP_COLORS[cell.color] or grid.PLAIN_LAMP
+end
 
 local SIZE, PAD = grid.SIZE, grid.PAD
 local STEP = { [0] = { 0, -1 }, { 1, 0 }, { 0, 1 }, { -1, 0 } } -- {dx, dy}

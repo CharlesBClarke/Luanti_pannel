@@ -19,12 +19,14 @@ local LAYOUT = {
 	{ "64-bit counter", 3, 0 },
 	{ "Clock Tower", 5, 0 },
 	{ "Wave", 7, 0 }, { "Wave", 8, 0 }, { "Wave", 7, 1 }, { "Wave", 8, 1 },
+	{ "RGB Cycle", 10, 0 },
 }
 
 local BLURB = {
 	["Lights Out"] = "Press a cell to flip it and its neighbours; boards side by side make one game. Idle until pressed",
 	["64-bit counter"] = "One nested flip-flop per cell, counting 5 times a second",
 	["Wave"] = "Press a cell to send out a ring of light; it carries on across boards placed side by side",
+	["RGB Cycle"] = "Each cell is a nested red, green and blue lamp on a 3-bit counter; their light mixes into one pixel",
 	["Clock Tower"] = "Clocks nested " .. demos.TOWER_LEVELS .. " levels deep, merged by the compiler",
 }
 
@@ -105,7 +107,7 @@ local function place(player)
 		local pos = vector.add(corner, vector.add(vector.multiply(right, entry[2]), vector.multiply(away, entry[3])))
 		local def = core.registered_nodes[core.get_node(pos).name]
 		if not (def and def.buildable_to) or core.is_protected(pos, name) then
-			return false, "No room: clear a flat 9x2 area in front of you."
+			return false, "No room: clear a flat 11x2 area in front of you."
 		end
 		spots[k] = pos
 	end
@@ -122,7 +124,7 @@ end
 
 core.register_chatcommand("panel_demo", {
 	params = "[place]",
-	description = "Get ready-made demo panels (Lights Out, Wave, a 64-bit counter, a clock tower), "
+	description = "Get ready-made demo panels (Lights Out, Wave, a 64-bit counter, a clock tower, RGB colors), "
 		.. "or place them in front of you",
 	privs = { give = true },
 	func = function(name, param)
@@ -131,8 +133,8 @@ core.register_chatcommand("panel_demo", {
 		if param == "place" then
 			local ok, err = place(player)
 			if not ok then return false, err end
-			return true, report("Placed in front of you: a 2x2 Lights Out floor, the counter, the clock tower "
-				.. "and a 2x2 Wave floor.")
+			return true, report("Placed in front of you: a 2x2 Lights Out floor, the counter, the clock tower, "
+				.. "a 2x2 Wave floor and the RGB Cycle.")
 		elseif param == "" then
 			hand_out(player)
 			return true, report(("Here are the demo panels (%d Lights Out and %d Wave boards, for 2x2 floors):"):format(

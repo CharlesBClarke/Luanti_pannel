@@ -89,6 +89,11 @@ local function run()
 	take("grid", slot(2, 2))
 	assert(draft()[grid.index(3, 2)] == nil and inv:get_stack("grid", slot(3, 2)):is_empty(), "torch fell off")
 	assert(pinv:contains_item("main", TORCH), "the fallen torch went back to the player")
+	-- A dyed lamp becomes a colored lamp, and comes back out as the same item.
+	local RED_LAMP = "mesecons_lightstone:lightstone_off_red"
+	assert(put("grid", slot(5, 5), RED_LAMP) == 1)
+	assert(draft()[grid.index(5, 5)].color == "red", "a red lamp is a red lamp cell")
+	assert(take("grid", slot(5, 5)):get_name() == RED_LAMP, "the red lamp comes back")
 	assert(put("grid", slot(1, 1), "mesecons:redstone") == 1)
 	local first = take("panel", 1)
 	local first_id = assert(library.item_id(first), "taking the panel compiles it")

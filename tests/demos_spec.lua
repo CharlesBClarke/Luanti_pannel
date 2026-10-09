@@ -61,7 +61,7 @@ end
 return {
 	every_demo_compiles_small = function()
 		local lib, ids, shown = build()
-		assert(#shown == 4, "expected 4 demos to hand out")
+		assert(#shown == 5, "expected 5 demos to hand out")
 		for _, name in ipairs(shown) do
 			local s = compile.stats(compile.from_library(lib, ids[name]))
 			assert(s.nodes < 4000, name .. " compiled to " .. s.nodes .. " nodes")
@@ -217,13 +217,46 @@ return {
 		end
 	end,
 
+	rgb_cycle_shows_8_colors = function()
+		local lib, ids = build()
+		local state = runtime.from_library(lib, ids["RGB Cycle"])
+		run(state, COUNT_SETTLE)
+		-- Each cell's color: the sum of what its lit lamps add.
+		local function colors()
+			local rgb = {}
+			for j, on in ipairs(runtime.lamp_list(state)) do
+				local c = state.net.lamp_cells[j]
+				rgb[c] = rgb[c] or { 0, 0, 0 }
+				if on then
+					for ch = 1, 3 do rgb[c][ch] = rgb[c][ch] + state.net.lamp_rgb[j][ch] end
+				end
+			end
+			return rgb
+		end
+		local seen, a, b = {}, grid.index(1, 1), grid.index(2, 1)
+		local differ = false
+		for _ = 1, 16 do
+			run(state, 1)
+			local rgb = colors()
+			seen[table.concat(rgb[a], ",")] = true
+			if table.concat(rgb[a], ",") ~= table.concat(rgb[b], ",") then differ = true end
+		end
+		local n = 0
+		for key in pairs(seen) do
+			n = n + 1
+			assert(key:match("^[01],[01],[01]$"), "not a pure color: " .. key)
+		end
+		assert(n == 8, ("cell 1,1 showed %d colors, want 8"):format(n))
+		assert(differ, "neighbouring cells should cycle in a different order")
+	end,
+
 	-- One level at a time, as in compile_spec: the reference with compiled
 	-- nested panels against the fully compiled panel, with random presses.
 	demos_match_the_reference = function()
 		local lib, ids = build()
 		local rnd = rng(11)
 		for _, name in ipairs({ "lights out cell", "Lights Out", "wave pulse", "wave cell", "Wave", "counter clock bit", "counter bit W-S",
-			"counter bit N-W", "64-bit counter", "tower 0", "tower 1" }) do
+			"counter bit N-W", "64-bit counter", "tower 0", "tower 1", "rgb pixel 1", "RGB Cycle" }) do
 			local id = ids[name]
 			local a = ref.from_library(lib, id, runtime.from_library)
 			local b = runtime.from_library(lib, id)

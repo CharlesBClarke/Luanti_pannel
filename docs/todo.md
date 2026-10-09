@@ -190,6 +190,12 @@ Items, in order of expected payoff:
    fewer steps per second, whole groups at a time, and show it (infotext or
    /panel_bench).
 
+## Colored pixels (2026-10-09, needs an in-game look)
+Dyed lamps go in the grid as colored lamps; faces mix RGB per spec "Pixels
+average" (compile.lua lamp_rgb, thumb.lua lamp_color). /panel_demo has an
+RGB Cycle board. Check in game: the colors and the dim "off" look, the
+4x3 creative palette, and client texture memory on a busy colored face.
+
 Later: lamps that are on should give off light in the world.
 Smaller fixes from the review that are still worth doing: undo. (Tool
 selection and right-click erase went away with the item grid; the status line
@@ -237,3 +243,12 @@ the existing entry when a design is identical.
 8. FIXED: `face_texture` hardcodes an `[fill:8x8` base; use `grid.SIZE` (world.lua ~173).
 9. FIXED: The bit test `m % 2^(d+1) >= 2^d` is copied three times in world.lua; make a
    `has_bit` helper.
+10. **Nested lamp colors are recomputed per instance** (sim/compile.lua ~247).
+    `averaged_rgb(K)` runs again for every nested copy of the same child design
+    and makes a new {r,g,b} table per lamp. Cache it per design (e.g. on K).
+11. **`thumb.LIVE.lamp` is only kept for the smoke test** (sim/thumb.lua ~52).
+    Faces color lamps through `thumb.lamp_color`; have smoke.lua call that
+    directly and drop `LIVE.lamp`, so the check can't drift from what faces draw.
+12. **One closure per lamp on each cached face** (sim/thumb.lua ~134). Faces are
+    never freed; store x, y, size, off on the entry and use a shared function in
+    `face_texture` instead.

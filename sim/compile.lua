@@ -12,6 +12,10 @@
 --
 -- Lamps are listed own lamps first (S.lamps order), then each nested
 -- panel's lamps (S.panels order); lamp_cells gives the cell each one lights.
+-- lamp_rgb[j] is what lamp j adds to its cell's pixel when lit, { r, g, b }
+-- from 0 to 1: an own lamp adds its color; a nested panel's pixel is, per
+-- channel, the average of its cells that have that channel (spec: Pixels
+-- average), so its lamps are scaled down by that count.
 -- probes[j] is the live state of the panel's own part at probe_cells[j]
 -- (S.probe_cells order), for the face display. Probes are kept alive like
 -- lamps, but only one level deep: inlining a nested panel drops its probes.
@@ -78,6 +82,29 @@ local function inline(B, K, kin, press_node, speed)
 	end
 	for i, r in pairs(regs) do B.nodes[r].d = cur[i] end
 	return first
+end
+
+-- What each of K's lamps adds to the one pixel K shows when nested: its
+-- lamp_rgb divided, per channel, by the number of K's cells with that channel.
+local function averaged_rgb(K)
+	local cell_has, count = {}, { 0, 0, 0 }
+	for j, rgb in ipairs(K.lamp_rgb) do
+		local c = K.lamp_cells[j]
+		cell_has[c] = cell_has[c] or {}
+		for ch = 1, 3 do
+			if rgb[ch] > 0 and not cell_has[c][ch] then
+				cell_has[c][ch] = true
+				count[ch] = count[ch] + 1
+			end
+		end
+	end
+	local out = {}
+	for j, rgb in ipairs(K.lamp_rgb) do
+		local w = {}
+		for ch = 1, 3 do w[ch] = rgb[ch] > 0 and rgb[ch] / count[ch] or 0 end
+		out[j] = w
+	end
+	return out
 end
 
 -- Step 1 and 2: wires, parts and inlined sub-panels as a raw network.
@@ -198,10 +225,11 @@ local function build(S, kid_net)
 		probes[j] = v
 	end
 
-	local lamps, lamp_cells = {}, {}
+	local lamps, lamp_cells, lamp_rgb = {}, {}, {}
 	for _, l in ipairs(S.lamps) do
 		lamps[#lamps + 1] = lit[l]
 		lamp_cells[#lamp_cells + 1] = l
+		lamp_rgb[#lamp_rgb + 1] = grid.lamp_rgb(S.cells[l])
 	end
 
 	-- kid_out is in the parent's frame; a turned panel's own port q faces
@@ -216,9 +244,11 @@ local function build(S, kid_net)
 		local K = kid_net(S.cells[c].id)
 		local seen = inline(B, K, kin, press(c), S.cells[c].speed or 1)
 		for q = 0, PORTS - 1 do nodes[kid_out[c][grid.turn_port(q, turn)]].args = { seen.outs[q] } end
-		for _, l in ipairs(seen.lamps) do
+		local rgb = averaged_rgb(K)
+		for j, l in ipairs(seen.lamps) do
 			lamps[#lamps + 1] = l
 			lamp_cells[#lamp_cells + 1] = c
+			lamp_rgb[#lamp_rgb + 1] = rgb[j]
 		end
 	end
 
@@ -239,7 +269,7 @@ local function build(S, kid_net)
 	end
 
 	return {
-		nodes = nodes, outs = outs, lamps = lamps, lamp_cells = lamp_cells,
+		nodes = nodes, outs = outs, lamps = lamps, lamp_cells = lamp_cells, lamp_rgb = lamp_rgb,
 		probes = probes, probe_cells = S.probe_cells,
 	}
 end
@@ -312,7 +342,7 @@ local function rebuild(net, find)
 		k = k + 1
 	end
 	return {
-		nodes = nodes, outs = outs, lamps = lamps, lamp_cells = net.lamp_cells,
+		nodes = nodes, outs = outs, lamps = lamps, lamp_cells = net.lamp_cells, lamp_rgb = net.lamp_rgb,
 		probes = probes, probe_cells = net.probe_cells,
 	}
 end
