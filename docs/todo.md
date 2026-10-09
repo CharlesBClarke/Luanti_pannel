@@ -10,6 +10,7 @@
 6. Panel covers (Ideas below).
 7. Graphics rework (Ideas below).
 8. Throttling (Optimizations item 7): keeps a server safe from big builds.
+   Decided 2026-10-09: all panels slow together (spec), not one group at a time.
 9. Small things: review findings 10-12, lamps giving light, undo.
 10. Later: deeper gate simplification; sleeping regions and bit-slicing
     (big builds only); world-only stacking itself; wall and ceiling

@@ -191,7 +191,7 @@ Decided 2026-10-08. Limits are derived from these goals, not picked on their own
   2. A survival base of about 50 panels, mostly idle, which should cost almost nothing.
   3. An animated 32×32 display (a 4×4 wall of panels) whose faces change every tick.
   4. The lights-out game on a 2×2 floor, played by hand.
-- **Over budget, slow down; never refuse or break.** When panels would go over budget, a connected group of panels (a wall, with its nested panels) runs fewer steps per second as a whole. Timing within the group stays exact, so results never change; the machine just runs slower, and players can see that it is throttled. Hard limits apply only at compile time (a size cap per panel), with the cost shown in the tooltip and a clear message from the workbench.
+- **Over budget, slow down; never refuse or break.** When panels would go over budget, all panels on the server run fewer steps per second together, like Minecraft's tick rate under lag. Timing between panels never changes, even between machines linked only through world redstone, so results never change; machines just run slower, and players can see that panels are throttled. (Decided 2026-10-09: throttling one group at a time could break designs whose groups talk through redstone.) Hard limits apply only at compile time (a size cap per panel), with the cost shown in the tooltip and a clear message from the workbench.
 - **Cost is visible.** A panel's tooltip shows its size and its cost per tick at the current speed, so players can see a limit coming before they hit it.
 
 ## Stretch goals
