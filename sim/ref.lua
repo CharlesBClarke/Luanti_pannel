@@ -7,6 +7,9 @@
 --
 -- Face presses go through ref.press() before the step they apply to.
 
+-- In-game, init.lua loads sim/ files with loadfile and passes its own loader.
+local require = type(...) == "function" and ... or require
+
 local grid = require("sim.grid")
 local static = require("sim.static")
 
@@ -151,7 +154,31 @@ function ref.eval(state, inputs)
 		out[p] = v
 	end
 
-	state.last = { net_lit = net_lit, lit = lit, panel_in = panel_in, panel_out = panel_out, kid_lamps = kid_lamps }
+	-- Live state of own parts, as compiled probes see it (S.probe_cells order).
+	local probes = {}
+	for j, c in ipairs(S.probe_cells) do
+		local kind = S.cells[c].kind
+		local v
+		if kind == "dust" then
+			v = net_lit[S.net_of[c * 2]]
+		elseif kind == "quartz" then
+			v = net_lit[S.net_of[c * 2]] or net_lit[S.net_of[c * 2 + 1]]
+		elseif kind == "torch" then
+			v = state.torch[c]
+		elseif kind == "block" then
+			v = lit[c]
+		elseif kind == "bulb" then
+			v = state.bulb[c]
+		else
+			v = state.switch[c]
+		end
+		probes[j] = v == true
+	end
+
+	state.last = {
+		net_lit = net_lit, lit = lit, panel_in = panel_in, panel_out = panel_out, kid_lamps = kid_lamps,
+		probes = probes,
+	}
 	return out
 end
 
@@ -231,6 +258,11 @@ function ref.lamp_list(state)
 		for _, v in ipairs(state.last and state.last.kid_lamps[c] or {}) do o[#o + 1] = v end
 	end
 	return o
+end
+
+-- Live state of own parts (S.probe_cells order), from the last eval.
+function ref.probes(state)
+	return state.last and state.last.probes or {}
 end
 
 -- Nested panels may be reference states or compiled ones (once the compiler

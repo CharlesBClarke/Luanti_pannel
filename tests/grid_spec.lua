@@ -8,6 +8,19 @@ return {
 		assert(grid.get(g, 5, 3) == nil)
 	end,
 
+	["same_cells compares designs, not tables"] = function()
+		local a = { [grid.index(2, 2)] = { kind = "torch", attach = 3 }, [grid.index(1, 2)] = { kind = "block" } }
+		local b = { [grid.index(1, 2)] = { kind = "block" }, [grid.index(2, 2)] = { kind = "torch", attach = 3 } }
+		assert(grid.same_cells(a, b))
+		b[grid.index(2, 2)].attach = 1
+		assert(not grid.same_cells(a, b), "different attach")
+		b[grid.index(2, 2)].attach = 3
+		b[grid.index(5, 5)] = { kind = "dust" }
+		assert(not grid.same_cells(a, b), "extra cell")
+		assert(not grid.same_cells(b, a), "missing cell")
+		assert(grid.same_cells({}, {}))
+	end,
+
 	["edge cells"] = function()
 		assert(grid.is_edge(1, 4))
 		assert(grid.is_edge(8, 8))

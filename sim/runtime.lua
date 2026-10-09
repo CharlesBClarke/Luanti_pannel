@@ -4,6 +4,9 @@
 -- reference one: eval(state, inputs), step(state, inputs), press(state, cell).
 -- Presses are held until the next step; one press per cell per tick.
 
+-- In-game, init.lua loads sim/ files with loadfile and passes its own loader.
+local require = type(...) == "function" and ... or require
+
 local grid = require("sim.grid")
 
 local runtime = {}
@@ -59,14 +62,20 @@ function runtime.eval(state, inputs)
 	return out
 end
 
--- Advance one tick. Returns the edge outputs as seen at the start of the tick.
-function runtime.step(state, inputs)
-	local out = runtime.eval(state, inputs)
+-- Finish the tick from the last eval: registers take their next values and
+-- presses are released.
+function runtime.commit(state)
 	local vals, reg = state.vals, state.reg
 	for i, n in ipairs(state.net.nodes) do
 		if n.op == "reg" then reg[i] = vals[n.d] end
 	end
 	state.pressed = {}
+end
+
+-- Advance one tick. Returns the edge outputs as seen at the start of the tick.
+function runtime.step(state, inputs)
+	local out = runtime.eval(state, inputs)
+	runtime.commit(state)
 	return out
 end
 
@@ -79,6 +88,13 @@ end
 function runtime.lamp_list(state)
 	local o = {}
 	for j, l in ipairs(state.net.lamps) do o[j] = state.vals[l] == true end
+	return o
+end
+
+-- Live state of the panel's own parts (net.probe_cells order), from the last eval.
+function runtime.probes(state)
+	local o = {}
+	for j, v in ipairs(state.net.probes) do o[j] = state.vals[v] == true end
 	return o
 end
 

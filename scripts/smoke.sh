@@ -8,13 +8,14 @@ world="$root/.smoke/world"
 log="$root/.smoke/debug.txt"
 conf="$root/.smoke/luanti.conf"
 
+rm -rf "$world"
 mkdir -p "$world/worldmods"
 ln -sfn "$root" "$world/worldmods/redstone_panels"
 printf 'gameid = mineclone2\nbackend = sqlite3\n' > "$world/world.mt"
 printf 'redstone_panels.smoke_test = true\n' > "$conf"
 rm -f "$log"
 
-timeout 60 luanti --server --world "$world" --gameid mineclone2 \
+timeout 90 luanti --server --world "$world" --gameid mineclone2 \
 	--config "$conf" --logfile "$log" --port 30099 > /dev/null 2>&1 || true
 
 if grep -qE "ERROR|error:|Runtime error" "$log"; then

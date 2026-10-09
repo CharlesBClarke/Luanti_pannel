@@ -12,6 +12,12 @@
 --
 -- Lamps are listed own lamps first (S.lamps order), then each nested
 -- panel's lamps (S.panels order); lamp_cells gives the cell each one lights.
+-- probes[j] is the live state of the panel's own part at probe_cells[j]
+-- (S.probe_cells order), for the face display. Probes are kept alive like
+-- lamps, but only one level deep: inlining a nested panel drops its probes.
+
+-- In-game, init.lua loads sim/ files with loadfile and passes its own loader.
+local require = type(...) == "function" and ... or require
 
 local grid = require("sim.grid")
 local static = require("sim.static")
@@ -172,6 +178,26 @@ local function build(S, kid_net)
 		return kid_out[desc.cell][desc.side * BITS + bit]
 	end
 
+	local probes = {}
+	for j, c in ipairs(S.probe_cells) do
+		local kind = S.cells[c].kind
+		local v
+		if kind == "dust" then
+			v = net[S.net_of[c * 2]]
+		elseif kind == "quartz" then
+			v = B.add({ op = "or", args = { net[S.net_of[c * 2]], net[S.net_of[c * 2 + 1]] } })
+		elseif kind == "torch" then
+			v = torch[c]
+		elseif kind == "block" then
+			v = lit[c]
+		elseif kind == "bulb" then
+			v = bulb[c]
+		else
+			v = switch[c]
+		end
+		probes[j] = v
+	end
+
 	local lamps, lamp_cells = {}, {}
 	for _, l in ipairs(S.lamps) do
 		lamps[#lamps + 1] = lit[l]
@@ -208,7 +234,10 @@ local function build(S, kid_net)
 		outs[p] = v
 	end
 
-	return { nodes = nodes, outs = outs, lamps = lamps, lamp_cells = lamp_cells }
+	return {
+		nodes = nodes, outs = outs, lamps = lamps, lamp_cells = lamp_cells,
+		probes = probes, probe_cells = S.probe_cells,
+	}
 end
 
 local function new_alias()
@@ -224,7 +253,7 @@ local function new_alias()
 	return alias, find
 end
 
--- Copy the nodes reachable from the outputs and lamps, following aliases,
+-- Copy the nodes reachable from the outputs, lamps and probes, following aliases,
 -- in an order where every node comes after its args (regs are leaves).
 -- Drops everything else.
 local function rebuild(net, find)
@@ -268,16 +297,20 @@ local function rebuild(net, find)
 		return map[root]
 	end
 
-	local outs, lamps = {}, {}
+	local outs, lamps, probes = {}, {}, {}
 	for p = 0, PORTS - 1 do outs[p] = visit(net.outs[p]) end
 	for j, l in ipairs(net.lamps) do lamps[j] = visit(l) end
+	for j, v in ipairs(net.probes) do probes[j] = visit(v) end
 	local k = 1
 	while k <= #regs do
 		local r = nodes[regs[k]]
 		r.d = visit(r.d)
 		k = k + 1
 	end
-	return { nodes = nodes, outs = outs, lamps = lamps, lamp_cells = net.lamp_cells }
+	return {
+		nodes = nodes, outs = outs, lamps = lamps, lamp_cells = net.lamp_cells,
+		probes = probes, probe_cells = net.probe_cells,
+	}
 end
 
 -- Step 3: each instant loop (a strongly connected group of ORs) becomes one

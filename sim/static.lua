@@ -10,11 +10,16 @@
 --   { kind = "panel", cell = i, side = d }
 -- Buttons and levers ("switches") power all four sides, like a torch with no base.
 
+-- In-game, init.lua loads sim/ files with loadfile and passes its own loader.
+local require = type(...) == "function" and ... or require
+
 local grid = require("sim.grid")
 
 local static = {}
 
 local opposite, neighbor = grid.opposite, grid.neighbor
+-- Parts whose live state a placed panel's face shows (lamps are shown anyway).
+local PROBED = { dust = true, quartz = true, torch = true, block = true, bulb = true, button = true, lever = true }
 local PAD, SIZE = grid.PAD, grid.SIZE
 
 local function sorted_keys(set)
@@ -153,10 +158,12 @@ function static.analyze(cells)
 		cells = cells, nets = nets, net_of = net_of, wire_node = wire_node,
 		torches = {}, switches = {}, panels = {}, blocks = {}, bulbs = {}, lamps = {},
 		powered_by = {}, torch_base = {}, panel_side = {}, pin_out = {}, in_pins = {},
+		probe_cells = {},
 	}
 
 	for i = 0, PAD * PAD - 1 do
 		local k = kind(i)
+		if PROBED[k] then table.insert(S.probe_cells, i) end
 		if k == "torch" then
 			table.insert(S.torches, i)
 		elseif k == "button" or k == "lever" then

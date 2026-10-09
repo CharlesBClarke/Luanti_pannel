@@ -82,8 +82,9 @@ local function compare(lib, id, rnd, ticks, make_kid)
 		end
 		local oa, ob = ref.step(a, inputs), runtime.step(b, inputs)
 		local la, lb = ref.lamp_list(a), runtime.lamp_list(b)
-		local ga = bits(oa, 0, grid.PORTS - 1) .. "|" .. bits(la, 1, #la)
-		local gb = bits(ob, 0, grid.PORTS - 1) .. "|" .. bits(lb, 1, #lb)
+		local pa, pb = ref.probes(a), runtime.probes(b)
+		local ga = bits(oa, 0, grid.PORTS - 1) .. "|" .. bits(la, 1, #la) .. "|" .. bits(pa, 1, #pa)
+		local gb = bits(ob, 0, grid.PORTS - 1) .. "|" .. bits(lb, 1, #lb) .. "|" .. bits(pb, 1, #pb)
 		if ga ~= gb then
 			return ("panel %d tick %d\n    ref      %s\n    compiled %s"):format(id, t, ga, gb)
 		end
@@ -122,13 +123,19 @@ return {
 		end
 	end,
 
-	["unpowered clocks that reach nothing compile away"] = function()
-		local cells = lib_from({
-			{ 2, 2, "block" }, { 3, 2, "torch", W }, { 3, 3, "dust" }, { 2, 3, "dust" },
-			{ 5, 5, "block" }, { 6, 5, "torch", W }, { 6, 6, "dust" }, { 5, 6, "dust" },
-		})
-		local s = compile.stats(compile.panel(cells))
-		assert(s.gates == 0 and s.regs == 0, ("gates %d regs %d"):format(s.gates, s.regs))
+	["unpowered clocks that reach nothing compile away when nested"] = function()
+		local lib = {
+			[1] = { cells = lib_from({
+				{ 2, 2, "block" }, { 3, 2, "torch", W }, { 3, 3, "dust" }, { 2, 3, "dust" },
+				{ 5, 5, "block" }, { 6, 5, "torch", W }, { 6, 6, "dust" }, { 5, 6, "dust" },
+			}) },
+			[2] = { cells = lib_from({ { 4, 4, "panel", 1 } }) },
+		}
+		-- At the top level the face shows them, so they stay, merged into one clock.
+		local own = compile.stats(compile.from_library(lib, 1))
+		assert(own.regs == 1, ("top level: regs %d"):format(own.regs))
+		local s = compile.stats(compile.from_library(lib, 2))
+		assert(s.gates == 0 and s.regs == 0, ("nested: gates %d regs %d"):format(s.gates, s.regs))
 	end,
 
 	["identical clocks on one wire merge"] = function()

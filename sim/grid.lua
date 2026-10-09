@@ -91,6 +91,27 @@ function grid.set(g, x, y, cell)
 	g.cells[grid.index(x, y)] = cell
 end
 
+local function same_cell(a, b)
+	for k, v in pairs(a) do
+		if b[k] ~= v then return false end
+	end
+	for k in pairs(b) do
+		if a[k] == nil then return false end
+	end
+	return true
+end
+
+-- True if two cells tables hold the same design.
+function grid.same_cells(a, b)
+	for i, cell in pairs(a) do
+		if not (b[i] and same_cell(cell, b[i])) then return false end
+	end
+	for i in pairs(b) do
+		if not a[i] then return false end
+	end
+	return true
+end
+
 -- True if (x, y) is on the edge, i.e. connects to the outside.
 function grid.is_edge(x, y)
 	return x == 1 or y == 1 or x == SIZE or y == SIZE
