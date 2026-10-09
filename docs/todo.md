@@ -66,7 +66,10 @@ Findings:
 64 before items 2-3 was 7.6 / 9.5 (faces 1.7). About 110 ns per busy node per
 tick, so the 15 ms budget holds about 140k busy nodes at 1x. Server time only;
 sending faces to the client is not measured. Survival building checked in
-game the same day. Chat command output is logged in ~/.minetest/debug.txt
+game the same day, as were dragging a panel out of the workbench and the
+1/8 height. Client memory next to busy 8 (singleplayer, RSS every 15 s for
+4.5 min): 1.08-1.15 GB, up and down with GC, no upward trend, so busy faces
+don't pile up textures (GPU-only memory not measured). Chat command output is logged in ~/.minetest/debug.txt
 (ACTION CHAT lines), so read results there instead of asking the user to copy.
 
 ## Optimizations needed (from the benchmark; rerun scripts/bench.sh after each)
