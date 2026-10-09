@@ -156,7 +156,7 @@ The first version is the smallest thing that runs in VoxeLibre and tells us what
 - **Compile to an item** that can be placed in the world and nested inside another panel. Nesting is the core idea, so it has to be in from the start.
 - **Workbench with thumbnails:** the load-edit-take workbench, with Dupe, and thumbnails and tooltips on panel items and nested cells. Drawing the circuit on placed faces comes after this.
 - **Edge connections** between adjacent panels, one bit per edge cell.
-- **Floor placement only:** a panel lies flat on top of a block, grid facing up, turned by the direction the player faces. Wall and ceiling placement come later.
+- **Floor placement only:** a panel is a sheet 1/8 of a block thick lying flat on top of a block, grid facing up, turned by the direction the player faces. Wall and ceiling placement come later.
 - **Basic face IO:** one button or lever per cell, and lamps shown as plain on/off on the face. A button stays on for 10 ticks (1 s) after a press.
 - **Fixed 1× speed** at 10 ticks per second, matching redstone timing.
 - **A benchmark command** that reports server time per tick and active gate count, so the provisional numbers can be replaced with measured ones.

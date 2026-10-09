@@ -2,9 +2,10 @@
 
 ## State (2026-10-08)
 - Steps 1-4 of the UI redesign and the flicker fix are committed (a95b711) and pushed.
-- Face display: was checked upright; recheck now that it lies flat, in all
-  four turns, and that right-click presses the cell under the crosshair.
-- Placement: floor only, as in the spec. The face is a thin flat entity on top.
+- Steps 2-4 checked in game 2026-10-08 (workbench, floor faces in all turns, presses, live power).
+- Placement: floor only, as in the spec. The node is a 1/8-tall nodebox
+  (`PANEL_HEIGHT`, world.lua); the face is a thin flat entity on top of it.
+  Needs an in-game look at the new height.
 
 ## UI redesign (agreed 2026-10-08; spec: World and gameplay > Workbench, displays)
 The editor was too frustrating to use. Main complaint: nested panels on the board
@@ -72,6 +73,6 @@ the existing entry when a design is identical.
 6. FIXED: **Every Compile adds a new permanent library entry** (library.lua ~43), even for
    an identical design, and rewrites the whole library to storage each time.
 7. FIXED: The editor's reach limit (`> 10`, editor.lua ~166) should be a named constant.
-8. `face_texture` hardcodes an `[fill:8x8` base; use `grid.SIZE` (world.lua ~173).
+8. FIXED: `face_texture` hardcodes an `[fill:8x8` base; use `grid.SIZE` (world.lua ~173).
 9. FIXED: The bit test `m % 2^(d+1) >= 2^d` is copied three times in world.lua; make a
    `has_bit` helper.

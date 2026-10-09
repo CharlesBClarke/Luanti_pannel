@@ -48,6 +48,8 @@ for dir = 0, 3 do
 end
 local UP = vector.new(0, 1, 0) -- the face, where the grid shows
 local FACE_THICKNESS = 0.01
+local PANEL_HEIGHT = 1 / 8 -- one layer: 8 panels stack to a full block
+local PANEL_BOX = { -0.5, -0.5, -0.5, 0.5, -0.5 + PANEL_HEIGHT, 0.5 }
 
 local function node_dir(node)
 	return node.param2 % 4
@@ -142,7 +144,7 @@ local function update_face(P)
 	P.face_key = key
 	local tex = face_texture(P, lamps, probes)
 	if not (P.entity and P.entity:get_pos()) then
-		local at = vector.offset(P.pos, 0, 0.5 + FACE_THICKNESS / 2 + 0.001, 0)
+		local at = vector.offset(P.pos, 0, -0.5 + PANEL_HEIGHT + FACE_THICKNESS / 2 + 0.001, 0)
 		for _, obj in ipairs(core.get_objects_inside_radius(at, 0.1)) do
 			local ent = obj:get_luaentity()
 			if ent and ent.name == "redstone_panels:face" then obj:remove() end
@@ -437,9 +439,14 @@ local function pressed_cell(pos, node, clicker, pointed)
 	if not (pointed and pointed.type == "node" and clicker) then return nil end
 	local dir = node_dir(node)
 	if not vector.equals(vector.subtract(pointed.above, pointed.under), UP) then return nil end
-	local at = core.pointed_thing_to_face_pos(clicker, pointed)
-	if not at then return nil end
-	local rel = vector.subtract(at, pos)
+	-- core.pointed_thing_to_face_pos assumes a full cube, so intersect the
+	-- look ray with the panel's real top instead.
+	local eye = clicker:get_pos()
+	eye.y = eye.y + clicker:get_properties().eye_height + clicker:get_eye_offset().y / 10
+	local look = clicker:get_look_dir()
+	if look.y >= 0 then return nil end
+	local t = (pos.y + PANEL_BOX[5] - eye.y) / look.y
+	local rel = vector.subtract(vector.add(eye, vector.multiply(look, t)), pos)
 	local u = vector.dot(rel, SIDES[dir][1]) + 0.5
 	local v = 0.5 - vector.dot(rel, SIDES[dir][0])
 	local x = math.max(1, math.min(grid.SIZE, math.floor(u * grid.SIZE) + 1))
@@ -454,6 +461,10 @@ for mask = 0, 15 do
 	core.register_node(variant(mask), {
 		description = "Redstone Panel",
 		tiles = { front_tile, side_tile, side_tile, side_tile, side_tile, side_tile },
+		drawtype = "nodebox",
+		node_box = { type = "fixed", fixed = PANEL_BOX },
+		paramtype = "light",
+		sunlight_propagates = true,
 		paramtype2 = "4dir",
 		is_ground_content = false,
 		drop = "",
