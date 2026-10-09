@@ -337,7 +337,9 @@ mesecon.queue:add_function("redstone_panels_settled", function(pos)
 end)
 
 local tick_count = 0
-local bench = { times = {}, next = 1 }
+-- Last BENCH_WINDOW ticks: total time, and the part spent settling (eval),
+-- committing and driving redstone, and redrawing faces.
+local bench = { times = {}, settle = {}, commit = {}, face = {}, next = 1 }
 
 local function tick()
 	local started = core.get_us_time()
@@ -366,6 +368,7 @@ local function tick()
 		end
 	end
 	if links_dirty then relink() end
+	local settle_started = core.get_us_time()
 
 	-- Settle the instant part of every wall, starting from all outputs off
 	-- (the least fixpoint, as in sim/ref.lua), then advance everything.
@@ -403,16 +406,24 @@ local function tick()
 
 	-- Each panel's last eval above used its final inputs, so commit from it
 	-- instead of evaluating again (unless the redstone check overwrote it).
+	local commit_started = core.get_us_time()
+	local face_us = 0
 	for _, P in ipairs(order) do
 		local mask, dirty = redstone_mask(P)
 		if dirty then runtime.eval(P.state, P.inputs) end
 		runtime.commit(P.state)
 		set_mask(P, mask)
+		local face_started = core.get_us_time()
 		update_face(P)
+		face_us = face_us + core.get_us_time() - face_started
 		if tick_count % SAVE_TICKS == 0 then save_state(P) end
 	end
 
-	bench.times[bench.next] = core.get_us_time() - started
+	local now = core.get_us_time()
+	bench.times[bench.next] = now - started
+	bench.settle[bench.next] = commit_started - settle_started
+	bench.commit[bench.next] = now - commit_started - face_us
+	bench.face[bench.next] = face_us
 	bench.next = bench.next % BENCH_WINDOW + 1
 end
 
@@ -528,27 +539,39 @@ core.register_lbm({
 -- Benchmark ----------------------------------------------------------------
 
 function world.bench()
-	local gates, regs = 0, 0
+	local nodes, gates, regs = 0, 0, 0
 	for _, P in ipairs(order) do
 		local s = sim.compile.stats(P.net)
-		gates, regs = gates + s.gates, regs + s.regs
+		nodes, gates, regs = nodes + s.nodes, gates + s.gates, regs + s.regs
 	end
 	local total, worst, n = 0, 0, 0
 	for _, t in pairs(bench.times) do
 		total, worst, n = total + t, math.max(worst, t), n + 1
 	end
+	local function avg(list)
+		local sum = 0
+		for _, t in pairs(list) do sum = sum + t end
+		return n > 0 and sum / n / 1000 or 0
+	end
 	return {
-		panels = #order, gates = gates, regs = regs, ticks = n,
+		panels = #order, nodes = nodes, gates = gates, regs = regs, ticks = n,
 		avg_ms = n > 0 and total / n / 1000 or 0, max_ms = worst / 1000,
+		settle_ms = avg(bench.settle), commit_ms = avg(bench.commit), face_ms = avg(bench.face),
 	}
+end
+
+-- Start a fresh measuring window.
+function world.reset_bench()
+	bench.times, bench.settle, bench.commit, bench.face, bench.next = {}, {}, {}, {}, 1
 end
 
 core.register_chatcommand("panel_bench", {
 	description = "Server time per tick and active gate count for redstone panels",
 	func = function()
 		local b = world.bench()
-		return true, ("%d panels, %d gates, %d registers; tick %.3f ms avg, %.3f ms max (last %d ticks)"):format(
-			b.panels, b.gates, b.regs, b.avg_ms, b.max_ms, b.ticks)
+		return true, ("%d panels, %d gates, %d registers; tick %.3f ms avg, %.3f ms max (last %d ticks); "
+			.. "settle %.3f, commit %.3f, faces %.3f ms"):format(
+			b.panels, b.gates, b.regs, b.avg_ms, b.max_ms, b.ticks, b.settle_ms, b.commit_ms, b.face_ms)
 	end,
 })
 

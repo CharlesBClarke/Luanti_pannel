@@ -38,6 +38,68 @@ don't show what they are, and a finished panel can't be inspected. Order:
 6. Speed is one server setting for all panels (spec: Speed). The MVP stays at
    1x; the editor already sets nested speed 1. Add the setting with the
    benchmark work.
+## Benchmark (first run 2026-10-08, scripts/bench.sh, headless, 1x speed)
+Floors of linked stress panels (sim/stress.lua), every panel busy every tick:
+| floor | nodes | tick avg | max | settle | commit | faces |
+|---|---|---|---|---|---|---|
+| busy 1 | 810 | 0.23 ms | 0.42 | 0.08 | 0.02 | 0.12 |
+| busy 16 | 13k | 1.3 ms | 1.8 | 0.67 | 0.20 | 0.44 |
+| busy 64 | 52k | 9.5 ms | 41 | 4.1 | 0.66 | 4.5 |
+| busy 256 | 207k | 20 ms | 63 | 10.6 | 1.9 | 7.9 |
+| heavy 1 | 11k | 1.4 ms | 1.9 | 0.80 | 0.37 | 0.20 |
+| heavy 16 | 182k | 13 ms | 17 | 8.5 | 2.5 | 2.2 |
+Findings:
+- Evaluating costs about 50 ns per compiled node per tick, and every node is
+  evaluated every tick: a still panel costs as much as a busy one (the spec
+  assumes still panels are nearly free). Skipping panels whose inputs and
+  registers did not change would fix that.
+- Face redraws cost about as much as evaluating when every face changes
+  every tick (headless: sending them to players is not measured yet).
+- Max ticks spike to 4-6x the average with many panels (likely GC from face
+  texture strings).
+- The tick is 100 ms. 10 ms of panels per tick is about 200k busy nodes at 1x;
+  speed multiplies cost directly.
+
+## Optimizations needed (from the benchmark; rerun scripts/bench.sh after each)
+In order of expected payoff:
+1. **Skip still panels.** runtime.eval runs every node every tick, so an idle
+   panel costs as much as a busy one (about 50 ns per node). A panel whose
+   inputs equal last tick's, with no press pending and no register changed
+   in the last commit, would give the same result: reuse its last outputs,
+   lamps and probes, and skip its face check. In world.lua the settle loop
+   then only queues panels that are awake or whose neighbour's outputs
+   changed. Watch out for: buttons counting down (registers change, so they
+   stay awake), speeds above 1x later, and the warm-up. Fuzz-check against
+   always evaluating.
+2. **Cheaper faces.** With every face changing every tick, redraws cost as
+   much as the logic (busy 256: 7.9 ms of 20). Each redraw formats 64+ fill
+   strings into one ~4 KB texture and sends all of it to every client. Every
+   distinct live state is also a new texture the client builds and caches,
+   so a busy face may grow client texture memory without limit (check in game
+   with /panel_stress busy 8). Ideas: cache each cell's fill fragment and
+   only rebuild changed cells; cap redraws per panel (for example at most
+   every 2-3 ticks) or skip them when no player is nearby; in the long run,
+   a face made of a fixed texture plus a small changing overlay, or a
+   palette-colored node instead of a texture string.
+3. **Less garbage per tick.** Max ticks spike to 4-6x the average with many
+   panels (busy 64: 9.5 ms avg, 41 ms max), most likely GC. Allocated every
+   tick per panel: gather()'s inputs table, runtime.eval's out table, P.out
+   = {}, the face key and texture strings. Reuse tables per panel instead.
+4. **Generate Lua for each compiled net.** eval walks a node list and
+   branches on op for every node. Compiling a net once into Lua source
+   (one local per node, plain and/or/not expressions) with loadstring should
+   let LuaJIT run it several times faster. Check that big nets don't hit
+   LuaJIT's limits (200 locals per function: use an array, or split into
+   chunks), and keep the plain runtime as the reference in fuzz tests.
+5. **Big nets cost more per node.** Offline, "heavy" (11k nodes) takes about
+   160 ns per node against about 40 for small nets. Probably wide ORs or
+   cache misses; look at fan-in after merge, and flatten nodes into arrays
+   (op, args) instead of one table per node.
+6. **Budget and limits (spec open questions).** After 1-3, rerun and pick:
+   a per-tick time budget for all panels (for example 10 ms of the 100 ms
+   tick), a node cap per panel, and what speeds are affordable (cost scales
+   directly with speed). Then decide the layer count.
+
 Later: lamps that are on should give off light in the world.
 Smaller fixes from the review that are still worth doing: undo. (Tool
 selection and right-click erase went away with the item grid; the status line
