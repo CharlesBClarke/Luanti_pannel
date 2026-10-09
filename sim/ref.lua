@@ -184,14 +184,47 @@ local function eval_once(state, inputs)
 	return out
 end
 
+-- Edge outputs that could carry their own input back: only through a
+-- nested panel, so only where the wire behind the edge cell touches one.
+local function echo_pins(S)
+	if not S.echo_pins then
+		local pins = {}
+		for p = 0, PORTS - 1 do
+			local d = S.pin_out[p]
+			if d and (d.kind == "panel" or d.kind == "net" and #S.net_src[d.net].panels > 0) then
+				pins[#pins + 1] = p
+			end
+		end
+		S.echo_pins = pins
+	end
+	return S.echo_pins
+end
+
+local function copy(t)
+	local o = {}
+	for k, v in pairs(t) do o[k] = v end
+	return o
+end
+
 -- Evaluate the instant part of the tick. Returns the 32 edge outputs.
 -- No self-echo: edge output p is what it would be with input p off (a
 -- signal can return to its own edge cell through a nested panel). Those
 -- evals go first: the real one must be last, for step and the kids.
+-- Results are remembered per input until the state changes (step, press),
+-- since a parent evaluates its kids many times over with the same inputs.
 function ref.eval(state, inputs)
+	local key = {}
+	for p = 0, PORTS - 1 do key[p + 1] = inputs[p] and "1" or "0" end
+	key = table.concat(key)
+	state.memo = state.memo or {}
+	local m = state.memo[key]
+	if m then
+		state.last = m.last
+		return copy(m.out)
+	end
 	local echo_free = {}
-	for p = 0, PORTS - 1 do
-		if inputs[p] and state.S.pin_out[p] then
+	for _, p in ipairs(echo_pins(state.S)) do
+		if inputs[p] then
 			local masked = {}
 			for q = 0, PORTS - 1 do masked[q] = q ~= p and inputs[q] end
 			echo_free[p] = eval_once(state, masked)[p]
@@ -199,6 +232,7 @@ function ref.eval(state, inputs)
 	end
 	local out = eval_once(state, inputs)
 	for p, v in pairs(echo_free) do out[p] = v end
+	state.memo[key] = { out = copy(out), last = state.last }
 	return out
 end
 
@@ -238,6 +272,7 @@ function ref.step(state, inputs)
 	end
 
 	state.torch = torch
+	state.memo = nil
 	return out
 end
 
@@ -246,6 +281,7 @@ end
 -- the next step. Pressing a nested panel's cell presses everything in it.
 function ref.press(state, cell)
 	local S = state.S
+	state.memo = nil
 	for _, w in ipairs(S.switches) do
 		if cell == nil or cell == w then
 			if S.cells[w].kind == "lever" then
