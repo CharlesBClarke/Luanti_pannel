@@ -60,6 +60,15 @@ Findings:
 - The tick is 100 ms. 10 ms of panels per tick is about 200k busy nodes at 1x;
   speed multiplies cost directly.
 
+## In-game benchmark (2026-10-09, user's client, /panel_stress busy 8, standing by it)
+65 panels, 41,954 gates, 13,519 registers: tick 5.98 ms avg, 8.51 max; settle
+4.11, commit 0.97, faces 0.88 ms (faces drawn: player in range). Headless busy
+64 before items 2-3 was 7.6 / 9.5 (faces 1.7). About 110 ns per busy node per
+tick, so the 15 ms budget holds about 140k busy nodes at 1x. Server time only;
+sending faces to the client is not measured. Survival building checked in
+game the same day. Chat command output is logged in ~/.minetest/debug.txt
+(ACTION CHAT lines), so read results there instead of asking the user to copy.
+
 ## Optimizations needed (from the benchmark; rerun scripts/bench.sh after each)
 Plan (agreed 2026-10-08), in this order:
 - **First the no-regret ones, 1-3 below:** skip still panels, cheaper faces,
