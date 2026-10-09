@@ -24,6 +24,8 @@ local sim = {
 	edit = sim_require("sim.edit"),
 	stress = sim_require("sim.stress"),
 	demos = sim_require("sim.demos"),
+	art = sim_require("sim.art"),
+	cpu = sim_require("sim.cpu"),
 }
 
 local function load(file, ...)

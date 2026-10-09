@@ -197,6 +197,26 @@ Items, in order of expected payoff:
    buffer; estimated 40-60k nodes, to be measured). After 1-3, check that
    all reference builds fit 15 ms avg / 50 ms max together, then derive the
    size cap per panel, the default and max speed, and the layer count.
+   DONE in sim (2026-10-09, user chose a small real CPU over a synthetic
+   one; needs an in-game look): sim/cpu.lua, a computer in one block (8x8
+   tiles of 8x8 cells): 64 B RAM (bulb bits, 2 cells per bit, lamps show
+   the bytes), address decoders, accumulator A (master and slave), latch
+   B, ripple-carry adder, 6-bit X pointer, clock divider with glitch-free
+   phases. Program: RAM[X]=A; A=A+B; B=RAM[X], X++; idle (Fibonacci from
+   the power-on values), 64 ticks per step. tests/cpu_spec.lua checks it
+   against a Lua model through its lamps, and each tile kind compiled
+   against the reference. /panel_stress cpu <n> places it.
+   Offline (scripts/bench.lua): 13,678 nodes (9,148 gates, 4,525 regs),
+   1.8 ms per tick, 134 ns/node; active nodes per step 0.6% average, 14%
+   worst. So a CPU is very quiet: event-driven evaluation (above) should
+   cut its cost by an order of magnitude or more.
+   256 B did not fit one block: each tile side is 8 wires, each byte needs
+   2 select lines, so RAM tiles hold 4 bytes and need a decoder tile each;
+   scale the RAM cost by 4 for a CHUNGUS-class build (about 7 ms per tick
+   at full evaluation). Dense cell layouts come from scripts/solve.lua
+   (simulated annealing on a spec of parts and what powers them; resume
+   from a near-solution when stuck); scripts/cell.lua prints how a drawing
+   wires up.
 7. **Throttling (spec: over budget, slow down).** Measure each connected
    group's cost per step; when the total would go over budget, give groups
    fewer steps per second, whole groups at a time, and show it (infotext or

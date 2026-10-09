@@ -14,6 +14,7 @@ package.path = "./?.lua;" .. package.path
 local compile = require("sim.compile")
 local runtime = require("sim.runtime")
 local stress = require("sim.stress")
+local cpu = require("sim.cpu")
 
 local MIN_SECONDS = 0.2 -- time each design for at least this long
 local ACTIVITY_WARM = 20 -- steps run before counting activity
@@ -96,6 +97,11 @@ local names = stress.build(function(cells, name)
 	return #lib
 end)
 assert(names)
+local cpu_ids = cpu.build(function(cells, name)
+	lib[#lib + 1] = { cells = cells, name = name }
+	return #lib
+end)
+order[#order + 1] = cpu_ids.computer
 report(lib, order, function(id) return lib[id].name end)
 
 if arg[1] then

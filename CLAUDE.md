@@ -7,6 +7,7 @@ Spec: @docs/spec.md. It is the source of truth; if code and spec disagree, ask.
 - Smoke test: `scripts/smoke.sh` (headless VoxeLibre server, fails on any Lua error in the log)
 - Crosscheck vs JS prototype (optional, local only): `scripts/crosscheck.sh [seed] [trials] [ticks]`. Run after changing `sim/static.lua` or `sim/ref.lua`.
 - Benchmark: `scripts/bench.sh` (headless server, floors of stress panels from `sim/stress.lua`, logs tick times) and `luajit scripts/bench.lua [library.lua]` (offline, per design).
+- Cell layouts: `luajit scripts/cell.lua <drawing>` shows how a drawn 8x8 panel wires up; `luajit scripts/solve.lua <spec> [seed] [iters] [restarts] [resume-from]` searches for a layout (see its header).
 - Lint: `luacheck .` (not installed yet; needs luarocks)
 - Run both test commands after every change; show their output.
 

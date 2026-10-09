@@ -15,13 +15,16 @@ local SCENARIO = {
 	{ "busy", 1 }, { "busy", 4 }, { "busy", 8 }, { "busy", 16 },
 	{ "idle", 1 }, { "idle", 16 },
 	{ "heavy", 1 }, { "heavy", 2 }, { "heavy", 4 },
+	{ "cpu", 1 }, { "cpu", 4 },
 }
 local BENCH_ORIGIN = vector.new(0, 100, 0)
 
+-- Stress designs plus "cpu", the computer from sim/cpu.lua.
 local function stress_ids()
-	return sim.stress.build(function(cells, name)
-		return assert(library.add(cells, name, "stress"))
-	end)
+	local function add(cells, name) return assert(library.add(cells, name, "stress")) end
+	local ids = sim.stress.build(add)
+	ids.cpu = sim.cpu.build(add).computer
+	return ids
 end
 
 local placed = {} -- positions /panel_stress placed, for "/panel_stress clear"
@@ -56,7 +59,7 @@ end
 core.register_chatcommand("panel_stress", {
 	params = "<design> <side> | clear",
 	description = "Place a side x side floor of a stress panel next to you (designs: "
-		.. "clock, stage, busy, idle, heavy), then see /panel_bench",
+		.. "clock, stage, busy, idle, heavy, cpu), then see /panel_bench",
 	privs = { server = true },
 	func = function(name, param)
 		if param == "clear" then
@@ -69,7 +72,7 @@ core.register_chatcommand("panel_stress", {
 		side = tonumber(side)
 		local ids = stress_ids()
 		if not (design and ids[design] and side and side >= 1 and side <= MAX_SIDE) then
-			return false, "Usage: /panel_stress <clock|stage|busy|idle|heavy> <1-" .. MAX_SIDE .. "> or /panel_stress clear"
+			return false, "Usage: /panel_stress <clock|stage|busy|idle|heavy|cpu> <1-" .. MAX_SIDE .. "> or /panel_stress clear"
 		end
 		local player = core.get_player_by_name(name)
 		if not player then return false, "You need to be in game." end
