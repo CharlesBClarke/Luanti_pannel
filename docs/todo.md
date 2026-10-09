@@ -261,6 +261,8 @@ Items, in order of expected payoff:
   only live parts swapped (sim/thumb.lua), so use small PNG tiles referenced
   by the texture string ([combine), not inline pixels, to keep strings and
   client texture memory small. Mostly art work plus the dust-connection logic.
+  No special art for fused IO (a lamp and a button landing in one cell):
+  players can work out that a lit thing is also pressable (user, 2026-10-09).
 7. **Throttling (spec: over budget, slow down).** Measure each connected
    group's cost per step; when the total would go over budget, give groups
    fewer steps per second, whole groups at a time, and show it (infotext or
