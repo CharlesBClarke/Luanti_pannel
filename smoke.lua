@@ -158,6 +158,23 @@ local function run()
 	assert(world.activate(pg), "panel activates")
 	core.set_node(vector.offset(pg, 0, -1, 1), { name = "mcl_core:stone" })
 	core.place_node(vector.offset(pg, 0, 0, 1), { name = "mesecons_torch:redstoneblock" })
+	-- H1, H2: a wire touching two bits on each side ("locking cell" from
+	-- world "main test"), side by side, redstone west of H1. H2 echoes H1's
+	-- input back to it on the other bit; H1 must not count that as its own
+	-- output and turn into a clock.
+	local h = {}
+	for x = 1, 8 do h[#h + 1] = { x, 4, { kind = "dust" } } end
+	h[#h + 1] = { 1, 5, { kind = "dust" } }
+	h[#h + 1] = { 8, 5, { kind = "dust" } }
+	h = assert(library.add(design(h), "two bit wire", "smoke"))
+	local ph1, ph2 = vector.offset(ORIGIN, -3, 0, 0), vector.offset(ORIGIN, -2, 0, 0)
+	for _, pos in ipairs({ ph1, ph2 }) do
+		core.set_node(pos, { name = "redstone_panels:compiled", param2 = 0 })
+		core.get_meta(pos):set_int("panel_id", h)
+		assert(world.activate(pos), "panel activates")
+	end
+	core.set_node(vector.offset(ph1, -1, -1, 0), { name = "mcl_core:stone" })
+	core.place_node(vector.offset(ph1, -1, 0, 0), { name = "mesecons_torch:redstoneblock" })
 	local A = world.panels[core.hash_node_position(pa)]
 	local B = world.panels[core.hash_node_position(pb)]
 	sim.runtime.press(A.state, grid.index(8, 4))
@@ -186,6 +203,15 @@ local function run()
 		local G = world.panels[core.hash_node_position(pg)]
 		local changes = G.mask_changes or 0
 		if not check(changes <= 1, ("panel G flickers: its outputs changed %d times"):format(changes)) then
+			return
+		end
+		local H1 = world.panels[core.hash_node_position(ph1)]
+		changes = H1.mask_changes or 0
+		if not check(changes == 0, ("panel H1 flickers: its outputs changed %d times"):format(changes)) then
+			return
+		end
+		local h2name = core.get_node(ph2).name
+		if not check(h2name == "redstone_panels:compiled_2", "redstone should cross H1 and H2, H2 is " .. h2name) then
 			return
 		end
 		local wname = core.get_node(wire).name

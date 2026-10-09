@@ -282,25 +282,31 @@ local function side_has_input(inputs, d)
 	return inputs[d * BITS] == true -- a redstone side sets all 8 bits alike
 end
 
--- Sides that drive redstone this tick. Rule (1) above: a side that both has
--- redstone input and would drive is checked again with its input off.
--- Returns the mask and whether the panel's values were overwritten.
+-- Rule (1): would side d of P still drive redstone with its own redstone
+-- input off? A linked neighbour can hand that input back to P on another
+-- edge cell, so settle P's whole group that way, then settle it again for
+-- real (only after this may the group commit).
+local function quiet_drives(P, d)
+	local group = P.group
+	local function quiet(Q, side)
+		return not (Q == P and side == d) and external(Q, side)
+	end
+	floor.settle(group, quiet, FIXPOINT_EVALS_PER_PANEL * #group)
+	local drives = any_side(P.out, d)
+	floor.settle(group, external, FIXPOINT_EVALS_PER_PANEL * #group)
+	return drives
+end
+
+-- Sides that drive redstone this tick. A side that both has redstone input
+-- and would drive is checked again with its input off.
 local function redstone_mask(P)
-	local mask, dirty = 0, false
+	local mask = 0
 	for d = 0, 3 do
 		if not P.neighbors[d] and any_side(P.out, d) then
-			local drives = true
-			if side_has_input(P.inputs, d) then
-				local quiet = {}
-				for p, v in pairs(P.inputs) do quiet[p] = v end
-				for k = 0, BITS - 1 do quiet[d * BITS + k] = false end
-				drives = any_side(runtime.eval(P.state, quiet), d)
-				dirty = true
-			end
-			if drives then mask = mask + 2 ^ d end
+			if not side_has_input(P.inputs, d) or quiet_drives(P, d) then mask = mask + 2 ^ d end
 		end
 	end
-	return mask, dirty
+	return mask
 end
 
 local function set_mask(P, mask)
@@ -381,14 +387,14 @@ local function tick()
 	end
 
 	-- Each panel's last eval above used its final inputs, so commit from it
-	-- instead of evaluating again (unless the redstone check overwrote it).
+	-- instead of evaluating again. Masks first: the redstone check settles
+	-- whole groups again, which must not see a neighbour already committed.
 	local commit_started = core.get_us_time()
 	local face_us = 0
+	for _, P in ipairs(order) do P.next_mask = redstone_mask(P) end
 	for _, P in ipairs(order) do
-		local mask, dirty = redstone_mask(P)
-		if dirty then runtime.eval(P.state, P.inputs) end
 		runtime.commit(P.state)
-		set_mask(P, mask)
+		set_mask(P, P.next_mask)
 		local face_started = core.get_us_time()
 		update_face(P)
 		face_us = face_us + core.get_us_time() - face_started

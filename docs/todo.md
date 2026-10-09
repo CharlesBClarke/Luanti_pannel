@@ -201,6 +201,15 @@ and torch help are in the form.)
   redstone input back out of that same side, and the "ignore input while
   driving" rule turned that into a flicker. world.lua now works out a redstone
   side's output as if its own input were off. smoke.lua panel G covers it.
+- FIXED 2026-10-08: the same echo through a linked neighbour (user's "locking
+  cell" #2, world "main test": two side by side with a torch west of them
+  became a clock). The neighbour handed the torch's signal back on another
+  edge cell, and the "input off" check only re-evaluated the one panel with
+  the neighbour's old outputs. It now settles the whole linked group with
+  that input off, then settles it again for real; all masks are worked out
+  before any panel commits. smoke.lua panels H1/H2 cover it. Cost: two group
+  settles per redstone side that has input and drives, every tick; watch
+  this on big floors fed by redstone.
 
 ## Code review findings (not fixed yet)
 Planned: fix 1-4 and 7-9 now, 5 together with the floor placement work, and for 6 reuse

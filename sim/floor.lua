@@ -49,8 +49,9 @@ function floor.readers(net)
 	return readers
 end
 
--- Find the linked groups and mark each panel's group as looped or not
--- (P.looped). Call again whenever links change.
+-- Find the linked groups: P.group is the list of panels linked to P
+-- (itself included), P.looped whether that group has a loop. Call again
+-- whenever links change.
 function floor.relink(list)
 	local group = {}
 	for _, P in ipairs(list) do
@@ -69,7 +70,7 @@ function floor.relink(list)
 				end
 			end
 			local looped = floor.has_loop(members)
-			for _, Q in ipairs(members) do Q.looped = looped end
+			for _, Q in ipairs(members) do Q.looped, Q.group = looped, members end
 		end
 	end
 end
