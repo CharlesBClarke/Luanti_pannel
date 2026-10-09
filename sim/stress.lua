@@ -27,13 +27,14 @@ end
 -- ids[name] is the library id of an earlier design.
 stress.DESIGNS = {
 	-- A clock: a torch on a block, its dust feeding the block back, so it
-	-- flips every tick. Drives the east edge and a lamp.
+	-- flips every tick. Drives the east edge and a lamp (beside the wire:
+	-- a lamp in line would block it).
 	{ name = "clock", cells = function()
 		return {
 			[I(2, 2)] = { kind = "block" }, [I(3, 2)] = { kind = "torch", attach = 3 },
 			[I(3, 3)] = { kind = "dust" }, [I(2, 3)] = { kind = "dust" },
-			[I(4, 2)] = { kind = "dust" }, [I(5, 2)] = { kind = "lamp" },
-			[I(5, 1)] = { kind = "dust" }, [I(6, 2)] = { kind = "dust" }, [I(7, 2)] = { kind = "dust" },
+			[I(4, 2)] = { kind = "dust" }, [I(5, 2)] = { kind = "dust" }, [I(5, 1)] = { kind = "lamp" },
+			[I(6, 2)] = { kind = "dust" }, [I(7, 2)] = { kind = "dust" },
 			[I(8, 2)] = { kind = "dust" },
 		}
 	end },

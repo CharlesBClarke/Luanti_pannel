@@ -38,7 +38,7 @@ don't show what they are, and a finished panel can't be inspected. Order:
 6. Speed is one server setting for all panels (spec: Speed). The MVP stays at
    1x; the editor already sets nested speed 1. Add the setting with the
    benchmark work.
-## Benchmark (first run 2026-10-08, scripts/bench.sh, headless, 1x speed)
+## Benchmark (first run 2026-10-08, scripts/bench.sh, headless, 1x speed; superseded, see Optimizations)
 Floors of linked stress panels (sim/stress.lua), every panel busy every tick:
 | floor | nodes | tick avg | max | settle | commit | faces |
 |---|---|---|---|---|---|---|
@@ -64,7 +64,30 @@ Findings:
 Plan (agreed 2026-10-08), in this order:
 - **First the no-regret ones, 1-3 below:** skip still panels, cheaper faces,
   less garbage. They help whatever evaluator we end up with. Start with 1.
-- **Then measure activity:** add to scripts/bench.lua the share of nodes whose
+- **Activity measured 2026-10-08** (`luajit scripts/bench.lua [lib]`, share of
+  nodes whose value changes per step). The user's panels in world test3 are
+  very quiet: "game" #48/#74 (~2000 nodes) 0% still, 0.3% avg and 1.3% worst
+  when poked (random input flips and presses); every panel over 500 nodes is
+  at most 3%. Only clocks and the artificial stress designs are high (busy
+  97%, heavy 99.9%). **Decision: event-driven evaluation** (below) is the
+  evaluator to build, with full evaluation as the fallback when most of a
+  panel changes. Still to confirm on a CPU stand-in (item 6) once it exists.
+- Benchmark fix 2026-10-08: the stress clock had a lamp in the middle of its
+  output wire, which blocks it, so "busy" was in fact 0.5% active (the table
+  below is from that broken design; its cost was full evaluation of still
+  logic). Fixed: busy is now 97% active. Rerun on a quiet machine
+  (2026-10-08, after the still-panel skip and the clock fix):
+  | floor | nodes | tick avg | max | settle | commit | faces |
+  |---|---|---|---|---|---|---|
+  | busy 1 | 890 | 0.33 ms | 0.71 | 0.11 | 0.10 | 0.12 |
+  | busy 16 | 14k | 2.5 ms | 3.7 | 1.4 | 0.49 | 0.58 |
+  | busy 64 | 57k | 7.6 ms | 9.5 | 4.4 | 1.4 | 1.7 |
+  | busy 256 | 228k | 33 ms | 92 | 20 | 5.4 | 7.2 |
+  | idle 256 | 141k | 0.90 ms | 1.2 | 0.68 | 0.06 | 0.12 |
+  | heavy 1 | 13k | 2.4 ms | 3.1 | 1.2 | 1.0 | 0.14 |
+  | heavy 16 | 202k | 25 ms | 30 | 14 | 8.9 | 1.9 |
+  Busy 256 is over budget (15 ms avg, 50 max) and spikes to 3x its average.
+- Original plan step, **then measure activity:** add to scripts/bench.lua the share of nodes whose
   value changes per step (try the stress designs and the user's "game" panel
   #48 from world test3 now; the CPU stand-in from item 6 later).
   Dump a world's library for `luajit scripts/bench.lua <file>` (the key is a
