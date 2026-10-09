@@ -204,14 +204,18 @@ local function build(S, kid_net)
 		lamp_cells[#lamp_cells + 1] = l
 	end
 
+	-- kid_out is in the parent's frame; a turned panel's own port q faces
+	-- the parent at turn_port(q, turn).
 	for _, c in ipairs(S.panels) do
+		local turn = S.cells[c].turn
 		local kin = {}
-		for d = 0, 3 do
-			for k = 0, BITS - 1 do kin[d * BITS + k] = desc_node(S.panel_side[c][d], k) end
+		for q = 0, PORTS - 1 do
+			local p = grid.turn_port(q, turn)
+			kin[q] = desc_node(S.panel_side[c][math.floor(p / BITS)], p % BITS)
 		end
 		local K = kid_net(S.cells[c].id)
 		local seen = inline(B, K, kin, press(c), S.cells[c].speed or 1)
-		for p = 0, PORTS - 1 do nodes[kid_out[c][p]].args = { seen.outs[p] } end
+		for q = 0, PORTS - 1 do nodes[kid_out[c][grid.turn_port(q, turn)]].args = { seen.outs[q] } end
 		for _, l in ipairs(seen.lamps) do
 			lamps[#lamps + 1] = l
 			lamp_cells[#lamp_cells + 1] = c

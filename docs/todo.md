@@ -1,8 +1,7 @@
 # To do
 
 ## State (2026-10-08)
-- Engine glue (editor.lua, library.lua, world.lua, smoke.lua, init.lua changes) is
-  uncommitted. Commit once the user has checked it in game.
+- Steps 1-4 of the UI redesign and the flicker fix are committed (a95b711) and pushed.
 - Face display: was checked upright; recheck now that it lies flat, in all
   four turns, and that right-click presses the cell under the crosshair.
 - Placement: floor only, as in the spec. The face is a thin flat entity on top.
@@ -32,7 +31,7 @@ don't show what they are, and a finished panel can't be inspected. Order:
    and drop again to pick the next (check that a drop on a different slot is
    enough, since a drop on the same slot may never reach the server). The
    palette is creative-only.
-5b. Nested panel turns: the user is only toying with the idea. Make the
+5b. DONE in sim (no UI, by design): nested panel turns. The user is only toying with the idea. Make the
    compiler and reference handle a `turn` field (0-3) on nested panel cells,
    fuzz-tested, but no UI.
 6. Speed is one server setting for all panels (spec: Speed). The MVP stays at

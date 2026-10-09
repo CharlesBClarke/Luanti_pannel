@@ -10,7 +10,9 @@
 -- A cell is nil (empty) or a table:
 --   { kind = "dust" | "block" | "quartz" | "bulb" | "lamp" | "button" | "lever" }
 --   { kind = "torch", attach = d }           -- stands on the cell in direction d
---   { kind = "panel", id = k, speed = n }    -- a compiled panel from the library
+--   { kind = "panel", id = k, speed = n, turn = r }
+--       a compiled panel from the library, turned r quarter turns clockwise
+--       (as seen from above; nil means 0). See grid.turn_port.
 
 local grid = {}
 
@@ -110,6 +112,20 @@ function grid.same_cells(a, b)
 		if not a[i] then return false end
 	end
 	return true
+end
+
+-- Where port p of a panel ends up when the panel is turned r quarter turns
+-- clockwise. One turn takes the north edge to the east, east to south,
+-- south to west and west to north. Bits run left to right or top to bottom,
+-- so they keep their order leaving a north or south edge and reverse
+-- leaving an east or west one (its top end becomes the right end).
+function grid.turn_port(p, r)
+	for _ = 1, (r or 0) % 4 do
+		local d, b = math.floor(p / SIZE), p % SIZE
+		if d % 2 == 1 then b = SIZE - 1 - b end
+		p = (d + 1) % 4 * SIZE + b
+	end
+	return p
 end
 
 -- True if (x, y) is on the edge, i.e. connects to the outside.

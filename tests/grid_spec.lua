@@ -21,6 +21,22 @@ return {
 		assert(grid.same_cells({}, {}))
 	end,
 
+	["turn_port follows the corners round"] = function()
+		local function port(d, b) return d * grid.SIZE + b end
+		-- One clockwise turn: the top-left corner goes to the top-right.
+		assert(grid.turn_port(port(0, 0), 1) == port(1, 0), "N0 -> E0")
+		assert(grid.turn_port(port(0, 7), 1) == port(1, 7), "N7 -> E7")
+		assert(grid.turn_port(port(1, 0), 1) == port(2, 7), "E0 -> S7")
+		assert(grid.turn_port(port(2, 0), 1) == port(3, 0), "S0 -> W0")
+		assert(grid.turn_port(port(3, 0), 1) == port(0, 7), "W0 -> N7")
+		for p = 0, grid.PORTS - 1 do
+			assert(grid.turn_port(p, 0) == p and grid.turn_port(p, nil) == p)
+			assert(grid.turn_port(p, 4) == p, "four turns are none")
+			assert(grid.turn_port(grid.turn_port(p, 1), 3) == p)
+			assert(grid.turn_port(p, 2) == grid.turn_port(grid.turn_port(p, 1), 1))
+		end
+	end,
+
 	["edge cells"] = function()
 		assert(grid.is_edge(1, 4))
 		assert(grid.is_edge(8, 8))

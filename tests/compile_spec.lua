@@ -23,7 +23,7 @@ local function lib_from(list)
 	for _, e in ipairs(list) do
 		local cell = { kind = e[3] }
 		if e[3] == "torch" then cell.attach = e[4] end
-		if e[3] == "panel" then cell.id, cell.speed = e[4], e[5] or 1 end
+		if e[3] == "panel" then cell.id, cell.speed, cell.turn = e[4], e[5] or 1, e[6] end
 		cells[grid.index(e[1], e[2])] = cell
 	end
 	return cells
@@ -45,7 +45,8 @@ local function random_library(rnd)
 				elseif r < 0.66 then cell = { kind = "torch", attach = math.floor(rnd() * 4) }
 				elseif r < 0.69 then cell = { kind = rnd() < 0.5 and "button" or "lever" }
 				elseif r < 0.74 and k > 0 then
-					cell = { kind = "panel", id = math.floor(rnd() * k), speed = SPEEDS[math.floor(rnd() * #SPEEDS) + 1] }
+					cell = { kind = "panel", id = math.floor(rnd() * k), speed = SPEEDS[math.floor(rnd() * #SPEEDS) + 1],
+						turn = math.floor(rnd() * 4) }
 				end
 				if cell then
 					local i = grid.index(x, y)
@@ -147,6 +148,47 @@ return {
 		})
 		local s = compile.stats(compile.panel(cells))
 		assert(s.regs == 1, ("expected one register, got %d"):format(s.regs))
+	end,
+
+	["a turned nested panel connects through its turned sides"] = function()
+		-- Kid: dust across row 4, so its W edge connects to its E edge.
+		local row = {}
+		for x = 1, 8 do row[#row + 1] = { x, 4, "dust" } end
+		-- Parent: dust from the N edge down to the kid at (4,4), and from
+		-- the kid down to the S edge, all in column 4.
+		local function parent(turn)
+			local list = { { 4, 4, "panel", 1, 1, turn } }
+			for _, y in ipairs({ 1, 2, 3, 5, 6, 7, 8 }) do list[#list + 1] = { 4, y, "dust" } end
+			return { cells = lib_from(list) }
+		end
+		for turn, want in pairs({ [0] = false, true, false, true }) do
+			local lib = { [1] = { cells = lib_from(row) }, [2] = parent(turn) }
+			for _, st in ipairs({ runtime.from_library(lib, 2), ref.from_library(lib, 2) }) do
+				local out = (st.runtime or ref).eval(st, { [port(N, 3)] = true })
+				assert(out[port(S, 3)] == want, ("turn %d: N to S should be %s"):format(turn, tostring(want)))
+			end
+		end
+	end,
+
+	["a half-turned nested panel reverses bit order"] = function()
+		-- A carries one bit across on row 2 (W1 to E1); B carries row 7 (W6 to
+		-- E6). Bits keep their order where two nested panels touch. Half turned,
+		-- B's E6 faces the parent's W1 and its W6 the parent's E1, so the bit
+		-- gets through; unturned it does not.
+		local function across(y)
+			local list = {}
+			for x = 1, 8 do list[#list + 1] = { x, y, "dust" } end
+			return { cells = lib_from(list) }
+		end
+		for turn, want in pairs({ [0] = false, [2] = true }) do
+			local list = { { 3, 4, "panel", 1 }, { 4, 4, "panel", 2, 1, turn } }
+			for _, x in ipairs({ 1, 2, 5, 6, 7, 8 }) do list[#list + 1] = { x, 4, "dust" } end
+			local lib = { [1] = across(2), [2] = across(7), [3] = { cells = lib_from(list) } }
+			for _, st in ipairs({ runtime.from_library(lib, 3), ref.from_library(lib, 3) }) do
+				local out = (st.runtime or ref).eval(st, { [port(W, 3)] = true })
+				assert(out[port(E, 3)] == want, ("turn %d: W to E should be %s"):format(turn, tostring(want)))
+			end
+		end
 	end,
 
 	["dust straight across compiles to plain wiring"] = function()

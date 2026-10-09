@@ -106,15 +106,19 @@ function ref.eval(state, inputs)
 			net_lit[n] = powered(state, S.net_src[n], inputs, nil, panel_out)
 		end
 		local changed = false
+		-- panel_out is in the parent's frame, panel_in in the nested panel's
+		-- own: its port q faces the parent at turn_port(q, turn).
 		for _, c in ipairs(S.panels) do
+			local turn = S.cells[c].turn
 			local b = {}
-			for d = 0, 3 do
-				for k = 0, BITS - 1 do
-					b[d * BITS + k] = desc_bit(state, S.panel_side[c][d], k, inputs, net_lit, panel_out)
-				end
+			for q = 0, PORTS - 1 do
+				local p = grid.turn_port(q, turn)
+				b[q] = desc_bit(state, S.panel_side[c][math.floor(p / BITS)], p % BITS, inputs, net_lit, panel_out)
 			end
 			panel_in[c] = b
-			local o = ref.eval_any(state.kids[c], b)
+			local own = ref.eval_any(state.kids[c], b)
+			local o = {}
+			for q = 0, PORTS - 1 do o[grid.turn_port(q, turn)] = own[q] end
 			for p = 0, PORTS - 1 do
 				if (o[p] == true) ~= (panel_out[c][p] == true) then
 					changed = true
