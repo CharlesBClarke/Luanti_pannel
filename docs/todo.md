@@ -90,7 +90,16 @@ never qualifies, which is why this matters for the CPU goal (spec:
 Performance goals). Fuzz-test it against full evaluation tick for tick.
 
 Items, in order of expected payoff:
-1. **Skip still panels.** runtime.eval runs every node every tick, so an idle
+1. DONE 2026-10-08: **Skip still panels.** runtime.eval returns its last result
+   when inputs, registers and presses are unchanged (sim/runtime.lua); the
+   settle loop moved to sim/floor.lua, where a linked group with no instant
+   loop between panels starts from last tick's outputs (a group with one
+   still starts from all off). Faces skip redraws when nothing ran. Fuzzed in
+   tests/floor_spec.lua. Bench: idle 16x16 (256 panels, 140k nodes) 0.95 ms
+   per tick, busy floors unchanged. Left: a side that both reads and drives
+   redstone still evaluates twice per tick (redstone_mask's quiet eval), and
+   the ~3.7 us per still panel left is gather tables and engine calls.
+   Original note: runtime.eval runs every node every tick, so an idle
    panel costs as much as a busy one (about 50 ns per node). A panel whose
    inputs equal last tick's, with no press pending and no register changed
    in the last commit, would give the same result: reuse its last outputs,

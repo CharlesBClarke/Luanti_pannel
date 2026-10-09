@@ -13,7 +13,8 @@ rm -rf "$world"
 mkdir -p "$world/worldmods"
 ln -sfn "$root" "$world/worldmods/redstone_panels"
 printf 'gameid = mineclone2\nbackend = sqlite3\n' > "$world/world.mt"
-printf 'redstone_panels.bench = true\ndedicated_server_step = 0.1\n' > "$conf"
+# Keep the bench area's map block loaded for the whole run (default 29 s).
+printf 'redstone_panels.bench = true\ndedicated_server_step = 0.1\nserver_unload_unused_data_timeout = 3600\n' > "$conf"
 rm -f "$log"
 
 timeout 300 luanti --server --world "$world" --gameid mineclone2 \

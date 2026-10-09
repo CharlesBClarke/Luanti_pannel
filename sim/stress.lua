@@ -58,6 +58,16 @@ stress.DESIGNS = {
 			return { kind = "panel", id = x == 1 and ids.clock or ids.stage, speed = 1 }
 		end)
 	end },
+	-- Rows of stages with no clock: still once settled, so it should cost
+	-- almost nothing per tick (spec: an idle survival base). The top and
+	-- bottom rows stay empty: stages wire their lanes to their north and
+	-- south edges, and a floor of these would link lanes into torch rings.
+	{ name = "idle", cells = function(ids)
+		return fill(function(_, y)
+			if y == 1 or y == SIZE then return nil end
+			return { kind = "panel", id = ids.stage, speed = 1 }
+		end)
+	end },
 	-- A deeper one: rows of "busy" panels chained edge to edge.
 	{ name = "heavy", cells = function(ids)
 		return fill(function(x, y)

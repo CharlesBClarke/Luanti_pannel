@@ -13,6 +13,7 @@ local MEASURE_SECONDS = 3
 -- scripts/bench.sh: { design, side } floors, measured one after another.
 local SCENARIO = {
 	{ "busy", 1 }, { "busy", 4 }, { "busy", 8 }, { "busy", 16 },
+	{ "idle", 1 }, { "idle", 16 },
 	{ "heavy", 1 }, { "heavy", 2 }, { "heavy", 4 },
 }
 local BENCH_ORIGIN = vector.new(0, 100, 0)
@@ -55,7 +56,7 @@ end
 core.register_chatcommand("panel_stress", {
 	params = "<design> <side> | clear",
 	description = "Place a side x side floor of a stress panel next to you (designs: "
-		.. "clock, stage, busy, heavy), then see /panel_bench",
+		.. "clock, stage, busy, idle, heavy), then see /panel_bench",
 	privs = { server = true },
 	func = function(name, param)
 		if param == "clear" then
@@ -68,7 +69,7 @@ core.register_chatcommand("panel_stress", {
 		side = tonumber(side)
 		local ids = stress_ids()
 		if not (design and ids[design] and side and side >= 1 and side <= MAX_SIDE) then
-			return false, "Usage: /panel_stress <clock|stage|busy|heavy> <1-" .. MAX_SIDE .. "> or /panel_stress clear"
+			return false, "Usage: /panel_stress <clock|stage|busy|idle|heavy> <1-" .. MAX_SIDE .. "> or /panel_stress clear"
 		end
 		local player = core.get_player_by_name(name)
 		if not player then return false, "You need to be in game." end
@@ -97,7 +98,10 @@ if core.settings:get_bool("redstone_panels.bench", false) then
 			core.after(WARM_SECONDS, function()
 				world.reset_bench()
 				core.after(MEASURE_SECONDS, function()
-					lines[#lines + 1] = report(entry[1] .. " " .. entry[2] .. "x" .. entry[2])
+					local line = report(entry[1] .. " " .. entry[2] .. "x" .. entry[2])
+					local want = entry[2] * entry[2]
+					if world.bench().panels ~= want then line = line .. (" (WRONG: expected %d panels)"):format(want) end
+					lines[#lines + 1] = line
 					clear(list)
 					core.after(WARM_SECONDS, function() step(k + 1) end)
 				end)

@@ -23,7 +23,7 @@
 -- the wire again.
 
 local sim, library = ...
-local grid, runtime, thumb = sim.grid, sim.runtime, sim.thumb
+local grid, runtime, thumb, floor = sim.grid, sim.runtime, sim.thumb, sim.floor
 
 local world = {}
 
@@ -134,6 +134,9 @@ core.register_entity("redstone_panels:face", {
 })
 
 local function update_face(P)
+	-- Nothing evaluated since the last redraw: the face can't have changed.
+	if P.face_runs == P.state.runs and P.entity and P.entity:get_pos() then return end
+	P.face_runs = P.state.runs
 	local lamps, probes = runtime.lamp_list(P.state), runtime.probes(P.state)
 	local key = {}
 	for _, on in ipairs(lamps) do key[#key + 1] = on and "1" or "0" end
@@ -252,27 +255,16 @@ local function relink()
 			P.neighbors[d] = Q and Q.dir == P.dir and Q or nil
 		end
 	end
+	floor.relink(order)
 	links_dirty = false
 end
 
 -- Ticking ------------------------------------------------------------------
 
-local function gather(P)
-	local inputs, mi = {}, mesecon_in[P.hash] or {}
-	for d = 0, 3 do
-		local Q = P.neighbors[d]
-		local opp = grid.opposite(d)
-		local redstone = not Q and mi[d] and not has_bit(P.mask, d)
-			and not (settling[P.hash] and settling[P.hash][d])
-		for k = 0, BITS - 1 do
-			if Q then
-				inputs[d * BITS + k] = Q.out[opp * BITS + k] == true
-			else
-				inputs[d * BITS + k] = redstone and true or false
-			end
-		end
-	end
-	return inputs
+-- Redstone input of a side with no linked panel (see "No self-echo" above).
+local function external(P, d)
+	local mi, st = mesecon_in[P.hash], settling[P.hash]
+	return mi and mi[d] and not has_bit(P.mask, d) and not (st and st[d])
 end
 
 local function side_has_input(inputs, d)
@@ -370,37 +362,8 @@ local function tick()
 	if links_dirty then relink() end
 	local settle_started = core.get_us_time()
 
-	-- Settle the instant part of every wall, starting from all outputs off
-	-- (the least fixpoint, as in sim/ref.lua), then advance everything.
-	local queue, queued = {}, {}
-	for i, P in ipairs(order) do
-		P.out = {}
-		queue[i] = P
-		queued[P] = true
-	end
-	local head, budget = 1, FIXPOINT_EVALS_PER_PANEL * #order
-	while head <= #queue and budget > 0 do
-		local P = queue[head]
-		head, budget = head + 1, budget - 1
-		queued[P] = nil
-		P.inputs = gather(P)
-		local out = runtime.eval(P.state, P.inputs)
-		for d = 0, 3 do
-			local Q = P.neighbors[d]
-			if Q and not queued[Q] then
-				for k = 0, BITS - 1 do
-					local p = d * BITS + k
-					if (out[p] == true) ~= (P.out[p] == true) then
-						queue[#queue + 1] = Q
-						queued[Q] = true
-						break
-					end
-				end
-			end
-		end
-		P.out = out
-	end
-	if head <= #queue then
+	-- Settle the instant part of every wall (sim/floor.lua), then advance everything.
+	if not floor.settle(order, external, FIXPOINT_EVALS_PER_PANEL * #order) then
 		core.log("warning", "[redstone_panels] a panel wall did not settle within one tick")
 	end
 

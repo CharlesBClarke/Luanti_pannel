@@ -19,6 +19,7 @@ local sim = {
 	grid = sim_require("sim.grid"),
 	compile = sim_require("sim.compile"),
 	runtime = sim_require("sim.runtime"),
+	floor = sim_require("sim.floor"),
 	thumb = sim_require("sim.thumb"),
 	edit = sim_require("sim.edit"),
 	stress = sim_require("sim.stress"),
