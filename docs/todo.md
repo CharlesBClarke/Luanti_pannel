@@ -252,12 +252,10 @@ the existing entry when a design is identical.
 12. **One closure per lamp on each cached face** (sim/thumb.lua ~134). Faces are
     never freed; store x, y, size, off on the entry and use a shared function in
     `face_texture` instead.
-13. **Echo through a nested panel's edge dust.** Found 2026-10-09 in the user's
-    G_attach (nested "vert" panel): input N3 lights output N3, and W3 lights
-    W3. The parent feeds one value into all 8 bits of the nested side; the
-    nested edge dust spans several bits, so each bit's output includes the
-    others' input. Ref and compiled agree. Check against the spec's no-self-echo
-    rule.
+13. FIXED 2026-10-09: **Echo through a nested panel.** In the user's G_attach,
+    input N3 came back out of N3 by going down through the nested "vert"
+    panel and back up. Edge output p is now worked out with input p off
+    (compile.lua no_echo, ref.eval); "locking cell" was affected too.
 
 ## Quartz rule change (2026-10-09)
 Quartz is now one wire: rook links to every quartz in its row and column,

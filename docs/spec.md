@@ -22,7 +22,7 @@ Each panel is an 8×8 grid of buildable cells. There are no pins: every cell on 
 - **A side facing world redstone is one bit.** In the world, a panel side next to plain redstone reads one signal into all 8 edge cells and drives it with their OR. Since that side is a single wire, its output never comes from its own input, even through two different edge cells.
 - **4 clean bits with dust, 8 with care.** Because neighbouring edge dust merges, dust alone gives at most 4 independent bits per side (every other cell). Blocks and torches don't merge, so a careful design gets all 8. Quartz along an edge all share one row or column, so they act as one wire.
 - **Corners touch two sides.** A corner cell connects to both edges next to it, which can carry a signal around a corner.
-- **No self-echo.** An output never counts its own value fed back in, so a panel can't switch its own output off by reading it.
+- **No self-echo.** An output never counts its own value fed back in, so a panel can't switch its own output off by reading it. This holds even when the signal comes back the long way, through a nested panel (in one side, out another, and back): an edge output is always what it would be with that edge cell's own input off.
 
 ## Components
 

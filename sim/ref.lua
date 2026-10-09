@@ -93,8 +93,8 @@ function ref.new(S, make_kid)
 	return state
 end
 
--- Evaluate the instant part of the tick. Returns the 32 edge outputs.
-function ref.eval(state, inputs)
+-- One evaluation of the instant part of the tick, into state.last.
+local function eval_once(state, inputs)
 	local S = state.S
 	local panel_out, panel_in, net_lit = {}, {}, nil
 	for _, c in ipairs(S.panels) do panel_out[c] = {} end
@@ -181,6 +181,24 @@ function ref.eval(state, inputs)
 		net_lit = net_lit, lit = lit, panel_in = panel_in, panel_out = panel_out, kid_lamps = kid_lamps,
 		probes = probes,
 	}
+	return out
+end
+
+-- Evaluate the instant part of the tick. Returns the 32 edge outputs.
+-- No self-echo: edge output p is what it would be with input p off (a
+-- signal can return to its own edge cell through a nested panel). Those
+-- evals go first: the real one must be last, for step and the kids.
+function ref.eval(state, inputs)
+	local echo_free = {}
+	for p = 0, PORTS - 1 do
+		if inputs[p] and state.S.pin_out[p] then
+			local masked = {}
+			for q = 0, PORTS - 1 do masked[q] = q ~= p and inputs[q] end
+			echo_free[p] = eval_once(state, masked)[p]
+		end
+	end
+	local out = eval_once(state, inputs)
+	for p, v in pairs(echo_free) do out[p] = v end
 	return out
 end
 

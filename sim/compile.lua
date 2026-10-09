@@ -417,6 +417,50 @@ local function collapse_loops(net)
 	return rebuild(net, find)
 end
 
+-- Step 3b: no self-echo. Edge output p is worked out with input p off:
+-- a signal can come back to its own edge cell through a nested panel (in
+-- one side, out another, back in), so out[p] gets a copy of the nodes
+-- between in[p] and it, with in[p] replaced by off. Needs no instant loops
+-- (every node after its args), and appends copies so that still holds.
+local function no_echo(net)
+	local nodes, outs = net.nodes, net.outs
+	local in_node, off = {}, nil
+	for i, n in ipairs(nodes) do
+		if n.op == "in" then in_node[n.pin] = i end
+	end
+	for p = 0, PORTS - 1 do
+		local src, out = in_node[p], outs[p]
+		if src and out > src then
+			local dep = { [src] = true }
+			for i = src + 1, out do
+				for _, a in ipairs(nodes[i].args or {}) do
+					if dep[a] then
+						dep[i] = true
+						break
+					end
+				end
+			end
+			if dep[out] then
+				if not off then
+					nodes[#nodes + 1] = { op = "const", v = false }
+					off = #nodes
+				end
+				local copy = { [src] = off }
+				for i = src + 1, out do
+					if dep[i] then
+						local args = {}
+						for j, a in ipairs(nodes[i].args) do args[j] = copy[a] or a end
+						nodes[#nodes + 1] = { op = nodes[i].op, args = args }
+						copy[i] = #nodes
+					end
+				end
+				outs[p] = copy[out]
+			end
+		end
+	end
+	return net
+end
+
 -- Step 5a: fold constants and trivial gates. Returns the new net and
 -- whether anything changed.
 local function fold(net)
@@ -575,7 +619,7 @@ end
 
 -- Compile one panel. kid_net(id) returns the compiled network of a nested panel.
 function compile.panel(cells, kid_net)
-	local net = collapse_loops(build(static.analyze(cells), kid_net))
+	local net = no_echo(collapse_loops(build(static.analyze(cells), kid_net)))
 	warm_up(net)
 	repeat
 		local folded, merged

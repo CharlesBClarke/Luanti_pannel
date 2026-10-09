@@ -203,6 +203,23 @@ return {
 		assert(runtime.eval(st, { [port(N, 3)] = true })[port(S, 3)] == false)
 	end,
 
+	["no self-echo through a nested panel"] = function()
+		-- Kid: top and bottom edge dust spanning bits 1-6, joined down the
+		-- middle. In the parent, N3 runs into its top and S3 out of its
+		-- bottom, so a signal could go down and back up to N3.
+		local kid = {}
+		for x = 2, 7 do kid[#kid + 1] = { x, 1, "dust" } kid[#kid + 1] = { x, 8, "dust" } end
+		for y = 2, 7 do kid[#kid + 1] = { 5, y, "dust" } end
+		local parent = { { 4, 1, "dust" }, { 4, 2, "dust" }, { 4, 3, "panel", 1 } }
+		for y = 4, 8 do parent[#parent + 1] = { 4, y, "dust" } end
+		local lib = { { cells = lib_from(kid) }, { cells = lib_from(parent) } }
+		for _, st in ipairs({ runtime.from_library(lib, 2), ref.from_library(lib, 2) }) do
+			local out = (st.runtime or ref).eval(st, { [port(N, 3)] = true })
+			assert(out[port(S, 3)] == true, "passes through")
+			assert(out[port(N, 3)] == false, "no echo on N3")
+		end
+	end,
+
 	["quartz is one wire: rook links plus every side"] = function()
 		-- In from the west into (2,3)'s side; out of (7,3)'s top, same row,
 		-- and out of (2,6)'s side, same column as (2,3).
