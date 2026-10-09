@@ -217,6 +217,14 @@ Items, in order of expected payoff:
    (simulated annealing on a spec of parts and what powers them; resume
    from a near-solution when stuck); scripts/cell.lua prints how a drawing
    wires up.
+   In game (2026-10-09, /panel_stress cpu 1): 1.63 ms avg, 2.23 ms max per
+   tick (settle 1.04, commit 0.55, faces 0.04). Placing it froze the server
+   2.9 s: the first compile. Sub-designs take 0.28 s; the top level 2.4 s,
+   since it flattens every tile's gates and re-simplifies all 14k nodes.
+   Free fixes: simplify only where pieces join, or compile over several ticks.
+   DECIDED (user, 2026-10-09): the CPU is a proof of value, not the target.
+   Event-driven evaluation is PARKED: it mainly helps big quiet designs and
+   adds per-node overhead and code that every simple panel pays for.
 7. **Throttling (spec: over budget, slow down).** Measure each connected
    group's cost per step; when the total would go over budget, give groups
    fewer steps per second, whole groups at a time, and show it (infotext or
