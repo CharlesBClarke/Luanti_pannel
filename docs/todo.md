@@ -67,6 +67,10 @@ Plan (agreed 2026-10-08), in this order:
 - **Then measure activity:** add to scripts/bench.lua the share of nodes whose
   value changes per step (try the stress designs and the user's "game" panel
   #48 from world test3 now; the CPU stand-in from item 6 later).
+  Dump a world's library for `luajit scripts/bench.lua <file>` (the key is a
+  BLOB, hence the cast): `sqlite3 ~/.minetest/worlds/test3/mod_storage.sqlite
+  "select hex(value) from entries where modname='redstone_panels' and
+  cast(key as text)='library'" | xxd -r -p > lib.lua`
 - **Then pick ONE evaluator, from that number:** event-driven evaluation (below)
   if a CPU changes under about 10-20% of its nodes per step, else generated
   Lua code (item 4), or a hybrid. Don't build item 4 before this: the two pull
