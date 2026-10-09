@@ -169,19 +169,27 @@ local PULSE = {
 	{ 4, 2, "dust" }, { 5, 2, "dust" }, { 6, 2, "dust" }, { 7, 2, "dust" }, { 8, 2, "dust" },
 }
 
+-- Crossover: west-east dust on row 4; north-south jumps over it through two
+-- quartz in column 4, whose rows hold no other quartz.
+local CROSS = {
+	{ 1, 4, "dust" }, { 2, 4, "dust" }, { 3, 4, "dust" }, { 4, 4, "dust" },
+	{ 5, 4, "dust" }, { 6, 4, "dust" }, { 7, 4, "dust" }, { 8, 4, "dust" },
+	{ 4, 1, "dust" }, { 4, 2, "quartz" }, { 4, 6, "quartz" }, { 4, 7, "dust" }, { 4, 8, "dust" },
+}
+
 -- Wave cell. Each side reads its neighbour through a diode (so nothing
 -- passes straight through a cell) on one bit, and drives the cell's light
 -- on another: west reads row 2 and drives row 6, east the other way round,
 -- north reads column 2 and drives column 6, south the other way round. The
 -- inputs and the button meet in one wire X (crossing the light's wire at
--- the quartz) feeding the pulse. A cell lights once per wave: it reads its
+-- the crossover) feeding the pulse. A cell lights once per wave: it reads its
 -- own light back through the neighbours it lit, which holds X on until the
 -- wave has moved on.
 local WAVE_CELL = {
 	{ 2, 1, "panel", "wave diode N-S" }, { 1, 2, "panel", "wave diode W-E" },
 	{ 8, 6, "panel", "wave diode E-W" }, { 6, 8, "panel", "wave diode S-N" },
 	{ 2, 2, "dust" }, { 2, 3, "dust" }, { 2, 4, "dust" }, { 3, 4, "dust" }, -- X
-	{ 4, 4, "quartz" },
+	{ 4, 4, "panel", "wave cross" },
 	{ 5, 4, "dust" }, { 6, 4, "dust" }, { 6, 5, "dust" }, { 6, 6, "dust" }, { 7, 6, "dust" }, { 6, 7, "dust" },
 	{ 2, 5, "button" },
 	{ 3, 3, "panel", "wave pulse" },
@@ -234,6 +242,7 @@ demos.DESIGNS = {
 	{ name = "wave diode S-N", cells = function() return cells_of(mirror_y(transpose(DIODE2))) end },
 	{ name = "wave delay E-W", cells = function() return cells_of(mirror_x(DIODE4)) end },
 	{ name = "wave turn", cells = function() return cells_of(TURN4) end },
+	{ name = "wave cross", cells = function() return cells_of(CROSS) end },
 	{ name = "wave pulse", cells = function(ids) return cells_with(ids, PULSE) end },
 	{ name = "wave cell", cells = function(ids) return cells_with(ids, WAVE_CELL) end },
 	{ name = "Wave", show = true, cells = function(ids)

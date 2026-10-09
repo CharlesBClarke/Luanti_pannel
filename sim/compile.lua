@@ -209,10 +209,8 @@ local function build(S, kid_net)
 	for j, c in ipairs(S.probe_cells) do
 		local kind = S.cells[c].kind
 		local v
-		if kind == "dust" then
+		if kind == "dust" or kind == "quartz" then
 			v = net[S.net_of[c * 2]]
-		elseif kind == "quartz" then
-			v = B.add({ op = "or", args = { net[S.net_of[c * 2]], net[S.net_of[c * 2 + 1]] } })
 		elseif kind == "torch" then
 			v = torch[c]
 		elseif kind == "block" then

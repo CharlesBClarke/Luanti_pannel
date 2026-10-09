@@ -163,10 +163,8 @@ function ref.eval(state, inputs)
 	for j, c in ipairs(S.probe_cells) do
 		local kind = S.cells[c].kind
 		local v
-		if kind == "dust" then
+		if kind == "dust" or kind == "quartz" then
 			v = net_lit[S.net_of[c * 2]]
-		elseif kind == "quartz" then
-			v = net_lit[S.net_of[c * 2]] or net_lit[S.net_of[c * 2 + 1]]
 		elseif kind == "torch" then
 			v = state.torch[c]
 		elseif kind == "block" then

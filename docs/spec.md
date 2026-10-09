@@ -20,7 +20,7 @@ Each panel is an 8×8 grid of buildable cells. There are no pins: every cell on 
 - **Every connection point is one bit.** No point ever carries more than one bit. The only place many bits move at once is where two panels touch directly, where all 8 cells of a side meet their neighbor's 8 cells.
 - **Plain redstone sees the OR, drives all.** Dust along an edge touches several outside bits at once, so it reads their OR and powers them together. Edge dust is either a deliberate fan-out or something to avoid.
 - **A side facing world redstone is one bit.** In the world, a panel side next to plain redstone reads one signal into all 8 edge cells and drives it with their OR. Since that side is a single wire, its output never comes from its own input, even through two different edge cells.
-- **4 clean bits with dust, 8 with care.** Because neighbouring edge dust merges, dust alone gives at most 4 independent bits per side (every other cell). Blocks, torches, and quartz don't merge, so a careful design gets all 8.
+- **4 clean bits with dust, 8 with care.** Because neighbouring edge dust merges, dust alone gives at most 4 independent bits per side (every other cell). Blocks and torches don't merge, so a careful design gets all 8. Quartz along an edge all share one row or column, so they act as one wire.
 - **Corners touch two sides.** A corner cell connects to both edges next to it, which can carry a signal around a corner.
 - **No self-echo.** An output never counts its own value fed back in, so a panel can't switch its own output off by reading it.
 
@@ -33,13 +33,13 @@ Six items make up a panel, and none of them is ever rotated by the player. Every
 | Dust | Anything touching it | Everything it touches | Instant. Touching dust cells form one wire. |
 | Block | Dust, quartz, torches not on it, the edge, a neighbour panel's side | Nothing directly | Exists so torches have something to stand on and read. |
 | Torch | The block or bulb it stands on | Its other three sides: dust, quartz, blocks, the edge, a neighbour panel's side | Off while its block is powered, 1 tick later. Must stand on a block or bulb; falls off if that is removed. |
-| Quartz | Dust or torches at its sides | Every other quartz in its row, column, and the same spot in other layers | Wireless. Left/right signals travel the row; top/bottom signals travel the column; the two never mix. |
+| Quartz | Anything touching it, like dust | Everything it touches, plus every other quartz in its row, column, and the same spot in other layers | Wireless. One wire: a signal on any side reaches every linked quartz and comes out of all their sides. |
 | Copper bulb | Anything touching it, like a block | Nothing directly | Flips on or off each time its input turns on. A torch standing on it reads it. Memory with no rotation. |
 | Lamp | Anything touching it | Nothing | Lights when powered. Display only; acts as a pixel on the block face. Plain or any of VoxeLibre's 16 dyed colors. |
 
 **Torch placement.** When a torch touches more than one block or bulb, tapping it again moves it to the next one. Dropping it near a cell's edge picks the block on that side.
 
-**Wireless quartz rule.** Every quartz in a row shares one horizontal link, and every quartz in a column shares one vertical link. Placing a third quartz in a row joins it to that row's link, by design.
+**Wireless quartz rule.** A quartz links to every quartz a rook could reach: its whole row and its whole column. Links chain, so all quartz joined by rows and columns form one wire, and it connects to the redstone touching any of them. Placing a third quartz in a row joins it to that wire, by design. (Changed 2026-10-09: rows and columns used to be two separate links, one fed by left/right sides and one by top/bottom, which read as a bug in play.)
 
 **Considered and left out.** Edge pins (the edge itself is now the interface), the 3-bit bus (replaced by 8 one-bit edge cells per side), directional torches, rotating parts (only whole nested panels turn), crossover dust shapes, a separate via item, repeaters (two torches on blocks already give a one-way, non-inverting delay), observers (they need a facing), comparators and signal strength (panels are on/off only), and pistons (layouts must stay fixed).
 
@@ -71,9 +71,9 @@ Panels combine in two ways: nesting places a compiled panel inside one cell of a
 - A block holds 8 layers of 8×8 cells, so 512 cells of logic, all compiling into one block. Panels are thin: 8 layers stack to one cube.
 - Layers share the face. A nested panel's lamps still fuse into its cell, so the face stays a single 8×8 (64-pixel) tile.
 - Edges match layer by layer. Layer 1's edge connects to the neighbour block's layer 1, and so on, 8 bits per layer with no sharing, so a side carries 8 bits × 8 layers = 64 independent bits to the next block.
-- Quartz is the only wiring between layers (a face press is a separate, shared input; see Face IO). Quartz at the same cell position in adjacent layers shares its links, and connects straight through the whole stack at that position, the same way a row link spans a row.
-- Because of that, two independent quartz links can't sit at the same position in different layers; offset one by a cell.
-- Max depth bandwidth: quartz act like non-attacking rooks (no two sharing a row or column), so up to 8 per layer, 2 bits each (row link + column link) = 16 bits through the depth of a block.
+- Quartz is the only wiring between layers (a face press is a separate, shared input; see Face IO). Quartz at the same cell position in adjacent layers shares its wire, and connects straight through the whole stack at that position, the same way a row link spans a row.
+- Because of that, two independent quartz wires can't sit at the same position in different layers; offset one by a cell.
+- Max depth bandwidth: quartz act like non-attacking rooks (no two sharing a row or column), so up to 8 per layer, 1 bit each = 8 bits through the depth of a block.
 - A wall of blocks tiles in 3D: layer 1 of every block forms one continuous sheet, layer 2 another, with quartz stitching between sheets where a design needs it.
 - A layer stack compiles as a 3D grid: depth is just a third axis for grouping quartz, with no new rules and cost linear in the number of layers.
 

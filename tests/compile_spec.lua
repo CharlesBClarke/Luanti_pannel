@@ -202,4 +202,19 @@ return {
 		assert(runtime.eval(st, { [port(W, 3)] = true })[port(W, 3)] == false, "no self-echo")
 		assert(runtime.eval(st, { [port(N, 3)] = true })[port(S, 3)] == false)
 	end,
+
+	["quartz is one wire: rook links plus every side"] = function()
+		-- In from the west into (2,3)'s side; out of (7,3)'s top, same row,
+		-- and out of (2,6)'s side, same column as (2,3).
+		local cells = lib_from({
+			{ 1, 3, "dust" }, { 2, 3, "quartz" }, { 7, 3, "quartz" }, { 7, 2, "dust" }, { 7, 1, "dust" },
+			{ 2, 6, "quartz" }, { 1, 6, "dust" },
+		})
+		local lib = { { cells = cells } }
+		for _, st in ipairs({ runtime.from_library(lib, 1), ref.from_library(lib, 1) }) do
+			local out = (st.runtime or ref).eval(st, { [port(W, 2)] = true })
+			assert(out[port(N, 6)] == true, "row link reaches the dust above")
+			assert(out[port(W, 5)] == true, "column link reaches the next quartz")
+		end
+	end,
 }

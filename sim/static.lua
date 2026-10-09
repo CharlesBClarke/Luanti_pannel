@@ -39,12 +39,10 @@ function static.analyze(cells)
 		return cells[i].kind
 	end
 
-	-- Dust has one wire node; quartz has two: horizontal (east/west sides)
-	-- and vertical (north/south sides), which never mix.
+	-- Dust and quartz each have one wire node, the same on every side.
 	local function wire_node(i, d)
 		local k = kind(i)
-		if k == "dust" then return i * 2 end
-		if k == "quartz" then return (d == 1 or d == 3) and i * 2 or i * 2 + 1 end
+		if k == "dust" or k == "quartz" then return i * 2 end
 		return nil
 	end
 
@@ -77,7 +75,7 @@ function static.analyze(cells)
 		end
 	end
 
-	-- Quartz links wirelessly along its row (horizontal) and column (vertical).
+	-- Quartz links wirelessly to every quartz in its row and column (a rook move).
 	for a = 1, SIZE do
 		local first_row, first_col
 		for b = 1, SIZE do
@@ -87,7 +85,7 @@ function static.analyze(cells)
 			end
 			local c = grid.index(a, b)
 			if kind(c) == "quartz" then
-				if first_col then union(first_col * 2 + 1, c * 2 + 1) else first_col = c end
+				if first_col then union(first_col * 2, c * 2) else first_col = c end
 			end
 		end
 	end
@@ -96,7 +94,7 @@ function static.analyze(cells)
 	local net_of, root_net, nets = {}, {}, 0
 	for i = 0, PAD * PAD - 1 do
 		local k = kind(i)
-		local nodes = k == "dust" and { i * 2 } or k == "quartz" and { i * 2, i * 2 + 1 } or {}
+		local nodes = (k == "dust" or k == "quartz") and { i * 2 } or {}
 		for _, node in ipairs(nodes) do
 			local root = find(node)
 			if not root_net[root] then
