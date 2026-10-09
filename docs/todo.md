@@ -225,6 +225,13 @@ Items, in order of expected payoff:
    DECIDED (user, 2026-10-09): the CPU is a proof of value, not the target.
    Event-driven evaluation is PARKED: it mainly helps big quiet designs and
    adds per-node overhead and code that every simple panel pays for.
+   NEXT (decided 2026-10-09): a hex display. The computer must not cheat (no
+   chat command reading its lamps); instead a separate display panel placed
+   next to it, wired edge to edge like any player build. It shows the newest
+   value stored as two 3x5 hex digits (one block, no binary-to-decimal
+   converter). Link: 4 data wires + which-half + write pulse (6 of a side's
+   8), sent during the "store A" step from spare edge tiles. Decimal later
+   maybe (about 2x the work: converter plus 2-3 blocks).
 7. **Throttling (spec: over budget, slow down).** Measure each connected
    group's cost per step; when the total would go over budget, give groups
    fewer steps per second, whole groups at a time, and show it (infotext or
