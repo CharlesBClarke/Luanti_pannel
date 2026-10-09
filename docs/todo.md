@@ -1,5 +1,38 @@
 # To do
 
+## Ranking (2026-10-09; rule: simple-panel players first, see Decided below)
+1. Hex display for the computer (Optimizations item 6, NEXT).
+2. Spec: rewrite Layering as world-only stacking (Ideas below). Doc only.
+3. Compiler: delay lines as ring buffers, and self-running parts as lookup
+   tables (Compiler ideas below). Exact, common in simple builds.
+4. Generated Lua code (Optimizations item 4): every panel faster.
+5. Compile without freezing the server (big designs; Optimizations item 6).
+6. Panel covers (Ideas below).
+7. Graphics rework (Ideas below).
+8. Throttling (Optimizations item 7): keeps a server safe from big builds.
+9. Small things: review findings 10-12, lamps giving light, undo.
+10. Later: deeper gate simplification; sleeping regions and bit-slicing
+    (big builds only); world-only stacking itself; wall and ceiling
+    placement; the speed setting.
+Parked: event-driven evaluation (Optimizations item 6, Decided).
+
+## Compiler ideas (2026-10-09; all exact, checked by the fuzz tests)
+- **Delay lines as ring buffers.** Torch chains used purely as delays are
+  common; a k-register chain costs k evaluations a tick. A ring buffer
+  gives the same delay in one step per tick, whatever k.
+- **Self-running parts as lookup tables.** A part with no inputs (clock,
+  divider, blinker) is periodic: run it until it repeats, store the
+  sequence, replace it with a lookup of tick mod period. The computer's
+  clock and step counter (period 256) become one table.
+- **Deeper gate simplification:** flatten ORs of ORs, De Morgan to drop
+  inverter pairs, absorption. Cheap, maybe 5-20% fewer nodes; merge already
+  catches some.
+- **Sleeping regions (big builds only):** split a big design into regions
+  with their own "inputs changed?" check, like the still-panel skip inside
+  one design. Small panels stay one region, so nothing changes for them.
+- **Bit-slicing (big regular builds):** evaluate 32 identical copies (RAM
+  bits, adder bits) at once with bit operations. Large gain, complicated.
+
 ## State (2026-10-08)
 - Steps 1-4 of the UI redesign and the flicker fix are committed (a95b711) and pushed.
 - Steps 2-4 checked in game 2026-10-08 (workbench, floor faces in all turns, presses, live power).
