@@ -232,6 +232,22 @@ Items, in order of expected payoff:
    converter). Link: 4 data wires + which-half + write pulse (6 of a side's
    8), sent during the "store A" step from spare edge tiles. Decimal later
    maybe (about 2x the work: converter plus 2-3 blocks).
+
+## Ideas agreed 2026-10-09 (not started)
+- **Panel covers.** A cheap item (plate or dye) put on a placed panel when
+  not debugging; taken off to debug again. A covered face hides the circuit
+  (dust, torches, live power) but still shows and works its IO: lamps,
+  buttons, levers. Purely visual, the logic is unchanged. It saves face
+  redraws: only lamp changes redraw (busy 8 in game: faces were 0.88 of
+  6.0 ms), and likely more on network and client (each redraw sends a new
+  texture string; clients keep every distinct texture; not measured yet).
+  Could also block casual editing or inspection (spec: copy protection, later).
+- **Stacking is world-only** (user's model, to write into the spec): thin
+  panels placed on top of each other in the world, up to 8 per block space,
+  linked through quartz and edge to edge with neighbouring stacks; each
+  layer stays its own panel, and a stack can't be picked up or nested. No
+  3D compiler or layer editor; nested designs keep 8 wires per side. The
+  spec's Layering section still describes nestable 8-layer blocks.
 7. **Throttling (spec: over budget, slow down).** Measure each connected
    group's cost per step; when the total would go over budget, give groups
    fewer steps per second, whole groups at a time, and show it (infotext or
