@@ -20,6 +20,7 @@ local sim = {
 	compile = sim_require("sim.compile"),
 	runtime = sim_require("sim.runtime"),
 	thumb = sim_require("sim.thumb"),
+	edit = sim_require("sim.edit"),
 }
 
 local function load(file, ...)

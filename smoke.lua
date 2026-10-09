@@ -35,15 +35,63 @@ local function run()
 		end
 	end
 
-	-- Editor: place parts the way a player's clicks would.
-	local cells = {}
-	assert(editor.apply(cells, grid.index(2, 2), "block") == nil)
-	assert(editor.apply(cells, grid.index(3, 2), "torch") == nil)
-	assert(cells[grid.index(3, 2)].attach == 3, "torch stands on the block to its west")
-	assert(editor.apply(cells, grid.index(2, 2), "erase") == nil)
-	assert(cells[grid.index(3, 2)] == nil, "torch falls off when its block goes")
+	-- Workbench: drag parts in and out the way a player would, through the
+	-- node's inventory callbacks, with a stand-in player.
 	core.set_node(ORIGIN, { name = "redstone_panels:panel" })
-	assert(#editor.formspec(ORIGIN, "dust") > 0)
+	local bench = core.registered_nodes["redstone_panels:panel"]
+	local inv = core.get_meta(ORIGIN):get_inventory()
+	local pinv = core.create_detached_inventory("redstone_panels_smoke_player", {})
+	pinv:set_size("main", 36)
+	local player = {
+		get_player_name = function() return "smoke" end,
+		get_pos = function() return ORIGIN end,
+		get_inventory = function() return pinv end,
+		is_player = function() return true end,
+	}
+	local function put(list, k, item)
+		local stack = ItemStack(item)
+		local n = bench.allow_metadata_inventory_put(ORIGIN, list, k, stack, player)
+		if n > 0 then
+			stack:set_count(n)
+			inv:set_stack(list, k, stack)
+			bench.on_metadata_inventory_put(ORIGIN, list, k, stack, player)
+		end
+		return n
+	end
+	local function take(list, k)
+		local stack = inv:get_stack(list, k)
+		local n = bench.allow_metadata_inventory_take(ORIGIN, list, k, stack, player)
+		if n == 0 then return nil end
+		stack = inv:get_stack(list, k) -- taking the panel swaps in the compiled one first
+		inv:set_stack(list, k, ItemStack(""))
+		bench.on_metadata_inventory_take(ORIGIN, list, k, stack, player)
+		return stack
+	end
+	local function slot(x, y) return editor.cell_slot(grid.index(x, y)) end
+	local function draft() return core.deserialize(core.get_meta(ORIGIN):get_string("cells")) end
+	local STONE, TORCH = "mcl_core:stone", "mesecons_torch:mesecon_torch_on"
+
+	assert(#editor.formspec(ORIGIN) > 0)
+	for _, item in ipairs({ "redstone_panels:panel", "redstone_panels:blank", "redstone_panels:bulb" }) do
+		assert(core.get_all_craft_recipes(item), "no recipe for " .. item)
+	end
+	assert(put("grid", slot(2, 2), STONE) == 0, "the grid is locked while the slot is empty")
+	assert(put("panel", 1, "redstone_panels:blank") == 1)
+	assert(put("grid", slot(2, 2), STONE) == 1 and put("grid", slot(3, 3), STONE) == 1)
+	assert(put("grid", slot(6, 6), TORCH) == 0, "a torch needs a base")
+	assert(put("grid", slot(3, 2), TORCH) == 1)
+	assert(draft()[grid.index(3, 2)].attach == 2, "torch stands on the block below")
+	assert(take("grid", slot(3, 2)):get_name() == TORCH)
+	assert(put("grid", slot(3, 2), TORCH) == 1)
+	assert(draft()[grid.index(3, 2)].attach == 3, "putting it back picks the next block")
+	take("grid", slot(3, 3))
+	take("grid", slot(2, 2))
+	assert(draft()[grid.index(3, 2)] == nil and inv:get_stack("grid", slot(3, 2)):is_empty(), "torch fell off")
+	assert(pinv:contains_item("main", TORCH), "the fallen torch went back to the player")
+	assert(put("grid", slot(1, 1), "mesecons:redstone") == 1)
+	local first = take("panel", 1)
+	local first_id = assert(library.item_id(first), "taking the panel compiles it")
+	assert(inv:get_stack("grid", slot(1, 1)):is_empty() and next(draft()) == nil, "the parts went into the panel")
 
 	-- A: a lever on its east edge. B: dust straight across, a lamp under it.
 	local a = assert(library.add(design({ { 8, 4, { kind = "lever" } } }), "lever", "smoke"))
@@ -54,32 +102,25 @@ local function run()
 	local nest = design({ { 4, 4, { kind = "panel", id = b, speed = 1 } } })
 	assert(library.add(nest, "nest", "smoke"))
 
-	-- Items and nested cells show a thumbnail and a tooltip.
+	-- Items show a thumbnail and a tooltip.
 	local meta = library.item(b):get_meta()
 	assert(meta:get_string("inventory_image"):find("^%[fill:"), "item has a thumbnail")
 	assert(meta:get_string("description"):find("Edges: E in/out, W in/out", 1, true), "item tooltip lists edges")
 
-	-- Workbench: load a compiled panel, edit, commit; unchanged commits reuse the entry.
-	local inv = core.get_meta(ORIGIN):get_inventory()
-	assert(inv:get_size("panel") == 1, "workbench has a panel slot")
-	assert(not editor.formspec(ORIGIN, "dust"):find("c_1_1", 1, true), "grid is locked while the slot is empty")
+	-- Loading a compiled panel gives its parts as items; unchanged, it keeps its id.
 	local c = library.find(nest, "nest")
-	inv:set_stack("panel", 1, library.item(c))
-	editor.load(ORIGIN)
-	local fs = editor.formspec(ORIGIN, "dust")
-	assert(fs:find("tooltip[c_4_4;", 1, true), "nested cell has a tooltip")
-	assert(library.item_id(assert(editor.commit(ORIGIN, "smoke"))) == c, "unchanged design keeps its id")
-	local draft = core.deserialize(core.get_meta(ORIGIN):get_string("cells"))
-	assert(editor.apply(draft, grid.index(1, 1), "dust") == nil)
-	core.get_meta(ORIGIN):set_string("cells", core.serialize(draft))
-	local edited = library.item_id(assert(editor.commit(ORIGIN, "smoke")))
+	assert(put("panel", 1, library.item(c)) == 1)
+	assert(library.item_id(inv:get_stack("grid", slot(4, 4))) == b, "nested panel is an item in the grid")
+	assert(library.item_id(take("panel", 1)) == c, "unchanged design keeps its id")
+	assert(put("panel", 1, library.item(c)) == 1)
+	assert(put("grid", slot(1, 1), "mesecons:redstone") == 1)
+	local edited = library.item_id(take("panel", 1))
 	assert(edited and edited ~= c, "edited design gets a new id")
-	assert(library.item_id(inv:get_stack("panel", 1)) == edited, "slot holds the new panel")
 	assert(library.get(c), "the old entry is kept")
-	-- A blank panel with nothing drawn stays blank.
-	inv:set_stack("panel", 1, ItemStack("redstone_panels:blank"))
-	editor.load(ORIGIN)
-	assert(assert(editor.commit(ORIGIN, "smoke")):get_name() == "redstone_panels:blank")
+	-- Taking every part out leaves a blank panel.
+	assert(put("panel", 1, first) == 1)
+	assert(take("grid", slot(1, 1)):get_name() == ItemStack("mesecons:redstone"):get_name())
+	assert(take("panel", 1):get_name() == "redstone_panels:blank", "an empty grid gives a blank")
 
 	-- Turned 0: grid north is +z, east is +x.
 	local pa, pb = vector.offset(ORIGIN, 2, 0, 0), vector.offset(ORIGIN, 3, 0, 0)

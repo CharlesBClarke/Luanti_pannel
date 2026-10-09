@@ -25,7 +25,7 @@ don't show what they are, and a finished panel can't be inspected. Order:
    panel shows as a tile with its lamps. Live power (decided): the compiler keeps
    top-level probes for torches and dust wires, read on redraw, fuzz-checked
    against sim/ref.lua.
-5. Survival building by drag and drop (spec: Building UI, decided 2026-10-08).
+5. DONE (needs an in-game check: dragging, shift-click, torch arrows, the creative palette, recipes): survival building by drag and drop (spec: Building UI, decided 2026-10-08).
    The grid becomes 64 chest-like slots; parts are real items used up when
    placed and given back when taken out. Loading a compiled panel gives access
    to its parts as items. Dupe is creative-only. Torches pick a base; pick up
@@ -39,9 +39,9 @@ don't show what they are, and a finished panel can't be inspected. Order:
    1x; the editor already sets nested speed 1. Add the setting with the
    benchmark work.
 Later: lamps that are on should give off light in the world.
-Smaller fixes from the review that are still worth doing: show the selected tool
-clearly, right-click to erase, a status line in the form instead of chat, undo,
-explain torch attachment.
+Smaller fixes from the review that are still worth doing: undo. (Tool
+selection and right-click erase went away with the item grid; the status line
+and torch help are in the form.)
 
 ## Glitches
 - FIXED 2026-10-08: **"3 bus" (#7 in world test3) flashed in the world.** Cause: two

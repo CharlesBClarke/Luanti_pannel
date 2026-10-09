@@ -1,51 +1,55 @@
--- The panel workbench: a node with one panel slot and an 8x8 formspec grid.
--- Put in a blank panel to start a design, or a compiled panel to load its
--- design. Pick a part from the palette, click cells to place it. Taking the
--- panel out compiles the design: unchanged, it comes back as the same panel;
--- edited, it becomes a new library entry. Dupe gives a copy.
+-- The panel workbench: a node with one panel slot and an 8x8 grid of item
+-- slots. Put in a blank panel to start a design, or a compiled panel to
+-- load its design: its parts come out into the grid as real items. Drag
+-- parts in from your inventory and out again. Taking the panel out compiles
+-- the grid into it: unchanged, it comes back as the same panel; edited, it
+-- becomes a new library entry. Creative players also get Dupe and a free
+-- palette of parts (see sim/edit.lua for the placement rules).
 
 local sim, library = ...
-local grid = sim.grid
+local grid, edit = sim.grid, sim.edit
 
 local editor = {}
 
 local FORMNAME = "redstone_panels:editor"
 local BLANK = "redstone_panels:blank"
-local COMPILED = "redstone_panels:compiled"
-local CELL = 1.0 -- formspec size of one grid cell
-local GAP = 0.1
+local BULB = "redstone_panels:bulb"
+local PALETTE = "redstone_panels_palette"
+local SIZE = grid.SIZE
+local SLOTS = SIZE * SIZE
+local SLOT_STEP = 1.25 -- formspec distance between list slots (the default spacing)
 local MAX_NAME_LENGTH = 40
 local MAX_REACH = 10 -- how far a player may be from the workbench and still edit
-local DUPE_IS_FREE = true -- false: Dupe uses up a blank panel from the player's inventory
 local KIT_BLANKS = 16 -- blank panels handed out by /rp
+local BLANKS_PER_CRAFT = 4
+local BULBS_PER_CRAFT = 1
 
-local TOOLS = { "dust", "block", "torch", "quartz", "bulb", "lamp", "button", "lever", "panel", "erase" }
-local LABELS = {
-	dust = "Dust", block = "Block", torch = "Torch", quartz = "Quartz", bulb = "Copper bulb",
-	lamp = "Lamp", button = "Button", lever = "Lever", panel = "Panel (held)", erase = "Erase",
-}
--- Icons: VoxeLibre items where they exist, a flat color otherwise.
-local ICON_ITEMS = {
+-- The item each part is made of. One item per part, so taking a part out
+-- gives back exactly what went in.
+local PART_ITEMS = {
 	dust = "mesecons:redstone", block = "mcl_core:stone", torch = "mesecons_torch:mesecon_torch_on",
-	quartz = "mcl_nether:quartz", lamp = "mesecons_lightstone:lightstone_off",
+	quartz = "mcl_nether:quartz", bulb = BULB, lamp = "mesecons_lightstone:lightstone_off",
 	button = "mesecons_button:button_stone_off", lever = "mesecons_walllever:wall_lever_off",
-	panel = COMPILED,
 }
-local ICON_COLORS = {
-	dust = "#a01010", block = "#7a7a7a", torch = "#e04020", quartz = "#e8e0d8", bulb = "#b87333",
-	lamp = "#c0a050", button = "#8a8a8a", lever = "#6a5030", panel = "#3a3a3a", erase = "#202020",
-}
-local ARROWS = { [0] = "^", ">", "v", "<" } -- which way a torch's block is
-local EMPTY = "[fill:16x16:#2a2a2a"
-local EDGE = "[fill:16x16:#33302a"
-local LOCKED = "[fill:16x16:#1a1a1a"
+local PALETTE_ORDER = { "dust", "block", "torch", "quartz", "bulb", "lamp", "button", "lever" }
+local PART_OF = {} -- [item name] = part; filled once aliases are known
 
-local open = {} -- [player name] = { pos = , tool = , status = }
+-- Item stacks carry the real name, not an alias (mesecons:redstone is one).
+local function resolve(item)
+	return core.registered_aliases[item] or item
+end
+
+local ARROWS = { [0] = "^", ">", "v", "<" } -- which way a torch's block is
+local EDGE_TINT = "#c0a06030" -- marks the outer ring, which connects to neighbours
+
+local open = {} -- [player name] = { pos = , status = }
+local last_attach = {} -- [pos hash][cell] = attach of the torch last taken from there
 
 -- Workbench state ------------------------------------------------------------
 
 -- Node meta: "cells" is the draft being edited, "design_name" its name, and
 -- "loaded_id" the library entry it was loaded from (0 for a blank panel).
+-- The "grid" list always holds the draft's parts as items.
 
 local function get_cells(pos)
 	return core.deserialize(core.get_meta(pos):get_string("cells")) or {}
@@ -55,9 +59,45 @@ local function set_cells(pos, cells)
 	core.get_meta(pos):set_string("cells", core.serialize(cells))
 end
 
+-- Grid slot k (1-based, row by row) <-> padded cell index.
+local function slot_cell(k)
+	return grid.index((k - 1) % SIZE + 1, math.floor((k - 1) / SIZE) + 1)
+end
+
+local function cell_slot(i)
+	local x, y = grid.xy(i)
+	return (y - 1) * SIZE + x
+end
+
+-- The item a cell is made of.
+local function item_for(cell)
+	if cell.kind == "panel" then return library.get(cell.id) and library.item(cell.id) or ItemStack("") end
+	return ItemStack(PART_ITEMS[cell.kind])
+end
+
+-- The cell an item makes, or nil if it isn't a part.
+local function cell_for(stack)
+	local id = library.item_id(stack)
+	if id then return { kind = "panel", id = id, speed = 1 } end
+	local kind = PART_OF[stack:get_name()]
+	return kind and { kind = kind } or nil
+end
+
+local function fill_grid(inv, cells)
+	for k = 1, SLOTS do
+		local cell = cells[slot_cell(k)]
+		inv:set_stack("grid", k, cell and item_for(cell) or ItemStack(""))
+	end
+end
+
 local function get_inv(pos)
 	local inv = core.get_meta(pos):get_inventory()
 	if inv:get_size("panel") ~= 1 then inv:set_size("panel", 1) end
+	if inv:get_size("grid") ~= SLOTS then
+		-- A workbench from before the grid held items: its draft becomes items.
+		inv:set_size("grid", SLOTS)
+		if not inv:is_empty("panel") then fill_grid(inv, get_cells(pos)) end
+	end
 	return inv
 end
 
@@ -70,124 +110,131 @@ local function is_panel(stack)
 	return stack:get_name() == BLANK or library.item_id(stack) ~= nil
 end
 
--- Load the design of the panel now in the slot into the draft.
+local function memory(pos)
+	local hash = core.hash_node_position(pos)
+	last_attach[hash] = last_attach[hash] or {}
+	return last_attach[hash]
+end
+
+-- Load the design of the panel now in the slot into the draft and the grid.
 function editor.load(pos)
 	local meta = core.get_meta(pos)
 	local id = library.item_id(slot_stack(pos))
 	local entry = id and library.get(id)
-	set_cells(pos, entry and entry.cells or {})
+	local cells = entry and entry.cells or {}
+	set_cells(pos, cells)
+	fill_grid(get_inv(pos), cells)
 	meta:set_string("design_name", entry and entry.name or "")
 	meta:set_int("loaded_id", id or 0)
 end
 
+-- The parts went into the panel that was taken out.
 local function clear_draft(pos)
 	local meta = core.get_meta(pos)
 	set_cells(pos, {})
+	fill_grid(get_inv(pos), {})
 	meta:set_string("design_name", "")
 	meta:set_int("loaded_id", 0)
 end
 
 -- Compile the draft and put the result in the slot. Returns the slot's new
--- stack, or nil and an error message. An untouched blank stays a blank.
+-- stack, or nil and an error message. An empty grid makes a blank panel.
 function editor.commit(pos, owner)
 	local stack = slot_stack(pos)
 	if not is_panel(stack) then return nil, "No panel in the slot." end
 	local meta = core.get_meta(pos)
 	local cells, name = get_cells(pos), meta:get_string("design_name")
-	if stack:get_name() == BLANK and next(cells) == nil then return stack end
-	local id, err = library.add(cells, name, owner)
-	if not id then return nil, "Compile failed: " .. tostring(err) end
-	meta:set_int("loaded_id", id)
-	stack = library.item(id)
+	if next(cells) == nil then
+		stack = ItemStack(BLANK)
+	else
+		local id, err = library.add(cells, name, owner)
+		if not id then return nil, "Compile failed: " .. tostring(err) end
+		meta:set_int("loaded_id", id)
+		stack = library.item(id)
+	end
 	get_inv(pos):set_stack("panel", 1, stack)
 	return stack
 end
 
 -- Formspec -------------------------------------------------------------------
 
-local function icon(x, y, kind, name, label)
-	local item = ICON_ITEMS[kind]
-	if item and core.registered_items[item] then
-		return ("item_image_button[%f,%f;%f,%f;%s;%s;%s]"):format(x, y, CELL, CELL, item, name,
-			core.formspec_escape(label))
-	end
-	local tex = "[fill:16x16:" .. (ICON_COLORS[kind] or "#000000")
-	return ("image_button[%f,%f;%f,%f;%s;%s;%s]"):format(x, y, CELL, CELL, core.formspec_escape(tex), name,
-		core.formspec_escape(label))
-end
-
 local function slot_bg(x, y, w, h)
 	if core.global_exists("mcl_formspec") then return mcl_formspec.get_itemslot_bg_v4(x, y, w, h) end
 	return ""
 end
 
-function editor.formspec(pos, tool, status)
+local function is_creative(player)
+	return core.is_creative_enabled(player:get_player_name())
+end
+
+local GX, GY = 0.5, 1 -- top left of the grid
+local PX = GX + SIZE * SLOT_STEP + 0.5 -- the column right of the grid
+
+function editor.formspec(pos, status, creative)
 	local loaded = is_panel(slot_stack(pos))
 	local cells = loaded and get_cells(pos) or {}
 	local inv_loc = ("nodemeta:%d,%d,%d"):format(pos.x, pos.y, pos.z)
 	local fs = {
 		"formspec_version[6]",
-		"size[15,16]",
+		"size[16.5,17.4]",
 		"label[0.5,0.5;" .. core.formspec_escape(loaded
-			and "Redstone Panel workbench: the outer ring of cells connects to neighbours"
-			or "Put a blank or compiled panel in the slot to start") .. "]",
+			and "Drag parts into the grid. The outer ring connects to neighbouring panels."
+			or "Put a blank or compiled panel in the slot to start.") .. "]",
+		slot_bg(GX, GY, SIZE, SIZE),
 	}
-	for y = 1, grid.SIZE do
-		for x = 1, grid.SIZE do
-			local cx, cy = 0.5 + (x - 1) * (CELL + GAP), 1 + (y - 1) * (CELL + GAP)
-			local cell = cells[grid.index(x, y)]
-			local name = ("c_%d_%d"):format(x, y)
-			if not loaded then
-				fs[#fs + 1] = ("image[%f,%f;%f,%f;%s]"):format(cx, cy, CELL, CELL, core.formspec_escape(LOCKED))
-			elseif cell and cell.kind == "panel" then
-				fs[#fs + 1] = ("image_button[%f,%f;%f,%f;%s;%s;]"):format(cx, cy, CELL, CELL,
-					core.formspec_escape(library.thumbnail(cell.id)), name)
-				fs[#fs + 1] = ("tooltip[%s;%s]"):format(name, core.formspec_escape(library.tooltip(cell.id)))
-			elseif cell then
-				local label = ""
-				if cell.kind == "torch" then label = ARROWS[cell.attach] end
-				if cell.kind == "bulb" then label = "B" end
-				fs[#fs + 1] = icon(cx, cy, cell.kind, name, label)
-			else
-				local tex = grid.is_edge(x, y) and EDGE or EMPTY
-				fs[#fs + 1] = ("image_button[%f,%f;%f,%f;%s;%s;]"):format(cx, cy, CELL, CELL,
-					core.formspec_escape(tex), name)
+	for y = 1, SIZE do
+		for x = 1, SIZE do
+			if grid.is_edge(x, y) then
+				fs[#fs + 1] = ("box[%f,%f;1,1;%s]"):format(GX + (x - 1) * SLOT_STEP, GY + (y - 1) * SLOT_STEP, EDGE_TINT)
 			end
 		end
 	end
+	fs[#fs + 1] = ("list[%s;grid;%f,%f;%d,%d;]"):format(inv_loc, GX, GY, SIZE, SIZE)
+	for i, cell in pairs(cells) do
+		if cell.kind == "torch" then
+			local x, y = grid.xy(i)
+			fs[#fs + 1] = ("label[%f,%f;%s]"):format(GX + (x - 1) * SLOT_STEP + 0.7, GY + (y - 1) * SLOT_STEP + 0.2,
+				ARROWS[cell.attach])
+		end
+	end
 
-	local px = 0.5 + grid.SIZE * (CELL + GAP) + 0.4
-	fs[#fs + 1] = slot_bg(px, 1, 1, 1)
-	fs[#fs + 1] = ("list[%s;panel;%f,1;1,1;]"):format(inv_loc, px)
-	fs[#fs + 1] = ("button[%f,1.1;1.8,0.8;dupe;Dupe]"):format(px + 1.3)
-	fs[#fs + 1] = ("button[%f,1.1;1.8,0.8;clear;Clear]"):format(px + 3.2)
-	fs[#fs + 1] = ("field[%f,2.6;5,0.8;name;Name (Enter to set);%s]"):format(px,
+	fs[#fs + 1] = slot_bg(PX, GY, 1, 1)
+	fs[#fs + 1] = ("list[%s;panel;%f,%f;1,1;]"):format(inv_loc, PX, GY)
+	fs[#fs + 1] = ("button[%f,%f;1.8,0.8;clear;Clear]"):format(PX + 1.3, GY + 0.1)
+	if creative then fs[#fs + 1] = ("button[%f,%f;1.8,0.8;dupe;Dupe]"):format(PX + 3.2, GY + 0.1) end
+	fs[#fs + 1] = ("field[%f,%f;5,0.8;name;Name (Enter to set);%s]"):format(PX, GY + 1.6,
 		core.formspec_escape(core.get_meta(pos):get_string("design_name")))
 	fs[#fs + 1] = "field_close_on_enter[name;false]"
-	for i, t in ipairs(TOOLS) do
-		local col, row = (i - 1) % 2, math.floor((i - 1) / 2)
-		local x, y = px + col * 2.6, 3.8 + row * 1.1
-		fs[#fs + 1] = icon(x, y, t, "t_" .. t, "")
-		local mark = t == tool and "> " or ""
-		fs[#fs + 1] = ("label[%f,%f;%s]"):format(x + CELL + 0.1, y + 0.5, core.formspec_escape(mark .. LABELS[t]))
+	fs[#fs + 1] = ("textarea[%f,%f;5,2.6;;;%s]"):format(PX, GY + 2.8, core.formspec_escape(
+		"Taking the panel out compiles the grid into it.\n"
+		.. "A torch stands on a block or bulb next to it (the arrow points to it). "
+		.. "Take it out and put it back to move it to the next one."))
+	if creative then
+		fs[#fs + 1] = ("label[%f,%f;Parts (creative)]"):format(PX, GY + 5.8)
+		fs[#fs + 1] = slot_bg(PX, GY + 6.2, 3, 3)
+		fs[#fs + 1] = ("list[detached:%s;parts;%f,%f;3,3;]"):format(PALETTE, PX, GY + 6.2)
 	end
-	fs[#fs + 1] = ("label[%f,9.5;%s]"):format(px, core.formspec_escape(
-		"Torch: click again to move it to\nanother block or bulb next to it."))
-	if status then fs[#fs + 1] = ("label[0.5,10.1;%s]"):format(core.formspec_escape(status)) end
+	if status then fs[#fs + 1] = ("label[%f,%f;%s]"):format(GX, GY + SIZE * SLOT_STEP + 0.1, core.formspec_escape(status)) end
 
-	fs[#fs + 1] = slot_bg(0.5, 10.6, 9, 4)
-	fs[#fs + 1] = "list[current_player;main;0.5,10.6;9,4;]"
-	fs[#fs + 1] = ("listring[%s;panel]listring[current_player;main]"):format(inv_loc)
+	local iy = GY + SIZE * SLOT_STEP + 0.6
+	fs[#fs + 1] = slot_bg(GX, iy, 9, 3)
+	fs[#fs + 1] = ("list[current_player;main;%f,%f;9,3;9]"):format(GX, iy)
+	fs[#fs + 1] = slot_bg(GX, iy + 3 * SLOT_STEP + 0.3, 9, 1)
+	fs[#fs + 1] = ("list[current_player;main;%f,%f;9,1;]"):format(GX, iy + 3 * SLOT_STEP + 0.3)
+	-- Shift-click goes to the next list in the ring (the first match wins):
+	-- palette and grid parts go to the inventory, panels go to the slot.
+	if creative then fs[#fs + 1] = ("listring[detached:%s;parts]listring[current_player;main]"):format(PALETTE) end
+	fs[#fs + 1] = ("listring[%s;panel]listring[%s;grid]listring[current_player;main]"):format(inv_loc, inv_loc)
 	return table.concat(fs)
 end
 
 local function show(player, pos)
 	local name = player:get_player_name()
-	open[name] = open[name] or { tool = "dust" }
+	open[name] = open[name] or {}
 	local st = open[name]
 	if st.pos and not vector.equals(st.pos, pos) then st.status = nil end
 	st.pos = pos
-	core.show_formspec(name, FORMNAME, editor.formspec(pos, st.tool, st.status))
+	core.show_formspec(name, FORMNAME, editor.formspec(pos, st.status, is_creative(player)))
 end
 
 -- Show `status` to `player` if they have this workbench open.
@@ -199,55 +246,6 @@ local function refresh(player, pos, status)
 end
 
 -- Editing --------------------------------------------------------------------
-
-local function is_base(cell)
-	return cell and (cell.kind == "block" or cell.kind == "bulb")
-end
-
--- Directions from cell i that have a block or bulb a torch could stand on.
-local function bases(cells, i)
-	local list = {}
-	for _, d in ipairs({ 2, 3, 1, 0 }) do -- prefer standing on the block below
-		local j = grid.neighbor(i, d)
-		if j and grid.is_inner(j) and is_base(cells[j]) then list[#list + 1] = d end
-	end
-	return list
-end
-
--- Torches fall off when the block they stand on goes away.
-local function drop_loose_torches(cells)
-	for i, cell in pairs(cells) do
-		if cell.kind == "torch" then
-			local j = grid.neighbor(i, cell.attach)
-			if not (j and grid.is_inner(j) and is_base(cells[j])) then cells[i] = nil end
-		end
-	end
-end
-
--- Apply `tool` to cell i. Returns an error message for the player, or nil.
-function editor.apply(cells, i, tool, held_id)
-	local cell = cells[i]
-	if tool == "erase" then
-		cells[i] = nil
-	elseif tool == "torch" then
-		local list = bases(cells, i)
-		if #list == 0 then return "A torch needs a block or bulb next to it." end
-		local attach = list[1]
-		if cell and cell.kind == "torch" then
-			for k, d in ipairs(list) do
-				if d == cell.attach then attach = list[k % #list + 1] end
-			end
-		end
-		cells[i] = { kind = "torch", attach = attach }
-	elseif tool == "panel" then
-		if not held_id then return "Hold a compiled panel to place it." end
-		cells[i] = { kind = "panel", id = held_id, speed = 1 }
-	else
-		cells[i] = { kind = tool }
-	end
-	drop_loose_torches(cells)
-	return nil
-end
 
 local function can_use(pos, player)
 	local name = player:get_player_name()
@@ -265,16 +263,77 @@ local function give(player, stack)
 	if not left:is_empty() then core.add_item(player:get_pos(), left) end
 end
 
+-- Torches that fell off leave the grid and go back to the player.
+local function return_fallen(pos, player, fallen)
+	if #fallen == 0 then return nil end
+	local inv = get_inv(pos)
+	for _, i in ipairs(fallen) do
+		inv:set_stack("grid", cell_slot(i), ItemStack(""))
+		give(player, ItemStack(PART_ITEMS.torch))
+	end
+	return #fallen == 1 and "A torch fell off and went back to your inventory."
+		or #fallen .. " torches fell off and went back to your inventory."
+end
+
+-- Error message if `stack` can't go into grid slot k, or nil.
+local function check_put(pos, k, stack)
+	if not is_panel(slot_stack(pos)) then return "Put a panel in the slot first." end
+	local cell = cell_for(stack)
+	if not cell then return stack:get_short_description() .. " is not a panel part." end
+	return edit.can_place(get_cells(pos), slot_cell(k), cell)
+end
+
+local function grid_put(pos, k, stack, player)
+	local cells, i = get_cells(pos), slot_cell(k)
+	local cell = cell_for(stack)
+	local err = cell and edit.place(cells, i, cell, cell.kind == "torch" and memory(pos)[i] or nil)
+	if err or not cell then -- changed under us since the check: hand the item back
+		get_inv(pos):set_stack("grid", k, ItemStack(""))
+		give(player, stack)
+		return err
+	end
+	set_cells(pos, cells)
+	return nil
+end
+
+local function grid_take(pos, k, player)
+	local cells, i = get_cells(pos), slot_cell(k)
+	local cell, fallen = edit.remove(cells, i)
+	if cell and cell.kind == "torch" then memory(pos)[i] = cell.attach end
+	set_cells(pos, cells)
+	return return_fallen(pos, player, fallen)
+end
+
+local function grid_move(pos, from, to, player)
+	local cells = get_cells(pos)
+	local err, fallen = edit.move(cells, slot_cell(from), slot_cell(to))
+	if err then -- the engine already moved the item; put the grid back as the design says
+		fill_grid(get_inv(pos), cells)
+		return err
+	end
+	set_cells(pos, cells)
+	return return_fallen(pos, player, fallen)
+end
+
 local function dupe(pos, player)
+	if not is_creative(player) then return "Dupe is creative-only." end
 	local stack, err = editor.commit(pos, player:get_player_name())
 	if not stack then return err end
-	if not DUPE_IS_FREE then
-		local inv = player:get_inventory()
-		if not inv:contains_item("main", BLANK) then return "Dupe needs a blank panel in your inventory." end
-		inv:remove_item("main", BLANK)
-	end
 	give(player, ItemStack(stack))
 	return "Duped " .. stack:get_short_description() .. "."
+end
+
+-- Empty the grid; in survival its parts go back to the player.
+local function clear(pos, player)
+	local inv = get_inv(pos)
+	if not is_creative(player) then
+		for k = 1, SLOTS do
+			local stack = inv:get_stack("grid", k)
+			if not stack:is_empty() then give(player, stack) end
+		end
+	end
+	set_cells(pos, {})
+	fill_grid(inv, {})
 end
 
 core.register_on_player_receive_fields(function(player, formname, fields)
@@ -295,25 +354,9 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 		open[name] = nil
 		return true
 	end
-	if not loaded then
-		show(player, pos)
-		return true
-	end
-
 	st.status = nil
-	local cells = get_cells(pos)
-	for key in pairs(fields) do
-		local t = key:match("^t_(%a+)$")
-		if t and LABELS[t] then st.tool = t end
-		local x, y = key:match("^c_(%d)_(%d)$")
-		if x then
-			local held = library.item_id(player:get_wielded_item())
-			st.status = editor.apply(cells, grid.index(tonumber(x), tonumber(y)), st.tool, held)
-			set_cells(pos, cells)
-		end
-	end
-	if fields.clear then set_cells(pos, {}) end
-	if fields.dupe then st.status = dupe(pos, player) end
+	if loaded and fields.clear then clear(pos, player) end
+	if loaded and fields.dupe then st.status = dupe(pos, player) end
 	show(player, pos)
 	return true
 end)
@@ -324,6 +367,12 @@ core.register_craftitem(BLANK, {
 	description = "Blank Redstone Panel\n" .. core.colorize("#a0a0a0", "Put it in a workbench to design a panel"),
 	inventory_image = sim.thumb.texture({}),
 	groups = { mesecon = 1 }, -- puts it in VoxeLibre's Redstone creative tab
+})
+
+core.register_craftitem(BULB, {
+	description = "Copper Bulb\n" .. core.colorize("#a0a0a0", "A panel part: flips on or off each time it is powered"),
+	inventory_image = "[fill:16x16:#00000000^[fill:10x10:3,3:#b87333^[fill:4x4:6,6:#ffb060",
+	groups = { mesecon = 1 },
 })
 
 core.register_node("redstone_panels:panel", {
@@ -340,38 +389,114 @@ core.register_node("redstone_panels:panel", {
 		if clicker and clicker:is_player() then show(clicker, pos) end
 		return itemstack
 	end,
-	allow_metadata_inventory_put = function(pos, _listname, _index, stack, player)
-		if not can_use(pos, player) or not is_panel(stack) or not slot_stack(pos):is_empty() then return 0 end
-		return 1
+	-- The panel and its parts stay inside until the panel is taken out.
+	can_dig = function(pos)
+		return get_inv(pos):is_empty("panel")
 	end,
-	on_metadata_inventory_put = function(pos, _listname, _index, _stack, player)
-		editor.load(pos)
-		refresh(player, pos, nil)
-	end,
-	-- Taking the panel compiles the draft first and swaps the result into the
-	-- slot; the engine moves whatever is in the slot after this returns.
-	allow_metadata_inventory_take = function(pos, _listname, _index, _stack, player)
+	allow_metadata_inventory_put = function(pos, listname, index, stack, player)
 		if not can_use(pos, player) then return 0 end
-		local stack, err = editor.commit(pos, player:get_player_name())
-		if not stack then
+		if listname == "panel" then
+			if not is_panel(stack) or not slot_stack(pos):is_empty() then return 0 end
+			return 1
+		end
+		local err = check_put(pos, index, stack)
+		if err then
 			refresh(player, pos, err)
 			return 0
 		end
 		return 1
 	end,
-	on_metadata_inventory_take = function(pos, _listname, _index, _stack, player)
-		clear_draft(pos)
-		refresh(player, pos, nil)
-	end,
-	allow_metadata_inventory_move = function() return 0 end,
-	-- The draft is lost when the workbench is dug; the panel comes back as it was put in.
-	after_dig_node = function(pos, _oldnode, oldmeta)
-		for _, item in ipairs(oldmeta.inventory and oldmeta.inventory.panel or {}) do
-			local stack = ItemStack(item)
-			if not stack:is_empty() then core.add_item(pos, stack) end
+	on_metadata_inventory_put = function(pos, listname, index, stack, player)
+		local status
+		if listname == "panel" then
+			editor.load(pos)
+		else
+			status = grid_put(pos, index, stack, player)
 		end
+		refresh(player, pos, status)
+	end,
+	-- Taking the panel compiles the draft first and swaps the result into the
+	-- slot; the engine moves whatever is in the slot after this returns.
+	allow_metadata_inventory_take = function(pos, listname, _index, stack, player)
+		if not can_use(pos, player) then return 0 end
+		if listname == "grid" then return stack:get_count() end
+		local result, err = editor.commit(pos, player:get_player_name())
+		if not result then
+			refresh(player, pos, err)
+			return 0
+		end
+		return 1
+	end,
+	on_metadata_inventory_take = function(pos, listname, index, _stack, player)
+		local status
+		if listname == "panel" then
+			clear_draft(pos)
+		else
+			status = grid_take(pos, index, player)
+		end
+		refresh(player, pos, status)
+	end,
+	allow_metadata_inventory_move = function(pos, from_list, from_index, to_list, to_index, count, player)
+		if from_list ~= "grid" or to_list ~= "grid" or not can_use(pos, player) then return 0 end
+		local err = edit.can_move(get_cells(pos), slot_cell(from_index), slot_cell(to_index))
+		if err then
+			refresh(player, pos, err)
+			return 0
+		end
+		return count
+	end,
+	on_metadata_inventory_move = function(pos, _from_list, from_index, _to_list, to_index, _count, player)
+		refresh(player, pos, grid_move(pos, from_index, to_index, player))
 	end,
 })
+
+-- Creative players take parts from here for free, and can drop items on it to delete them.
+local palette = core.create_detached_inventory(PALETTE, {
+	allow_take = function(_inv, _listname, _index, _stack, player)
+		return is_creative(player) and -1 or 0
+	end,
+	allow_put = function(_inv, _listname, _index, _stack, player)
+		return is_creative(player) and -1 or 0
+	end,
+	allow_move = function() return 0 end,
+})
+palette:set_size("parts", 9)
+
+-- A full stack, so shift-click hands out as many as fit in one slot.
+local function full_stack(item)
+	local stack = ItemStack(item)
+	stack:set_count(stack:get_stack_max())
+	return stack
+end
+
+core.register_on_mods_loaded(function()
+	for kind, item in pairs(PART_ITEMS) do PART_OF[resolve(item)] = kind end
+	local k = 0
+	for _, kind in ipairs(PALETTE_ORDER) do
+		if core.registered_items[resolve(PART_ITEMS[kind])] then
+			k = k + 1
+			palette:set_stack("parts", k, full_stack(PART_ITEMS[kind]))
+		end
+	end
+	palette:set_stack("parts", k + 1, full_stack(BLANK))
+
+	-- Survival recipes, only where the ingredients exist.
+	local function craft(def)
+		for _, row in ipairs(def.recipe) do
+			for _, item in ipairs(type(row) == "table" and row or { row }) do
+				if item ~= "" and not core.registered_items[resolve(item)] then return end
+			end
+		end
+		core.register_craft(def)
+	end
+	local stone, dust, slab = "mcl_core:stone", "mesecons:redstone", "mcl_stairs:slab_stone"
+	craft({
+		output = "redstone_panels:panel",
+		recipe = { { dust, dust, dust }, { stone, "mcl_crafting_table:crafting_table", stone }, { stone, stone, stone } },
+	})
+	craft({ output = BLANK .. " " .. BLANKS_PER_CRAFT, recipe = { { "", dust, "" }, { slab, slab, slab } } })
+	craft({ type = "shapeless", output = BULB .. " " .. BULBS_PER_CRAFT, recipe = { "mcl_copper:copper_ingot", dust } })
+end)
 
 core.register_chatcommand("rp", {
 	description = "Get a Redstone Panel workbench and some blank panels",
@@ -388,5 +513,8 @@ core.register_chatcommand("rp", {
 core.register_on_leaveplayer(function(player)
 	open[player:get_player_name()] = nil
 end)
+
+-- For the smoke test: the grid slot of a cell, and its inventory callbacks.
+editor.cell_slot = cell_slot
 
 return editor
