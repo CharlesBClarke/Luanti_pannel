@@ -141,7 +141,15 @@ Items, in order of expected payoff:
    every 2-3 ticks) or skip them when no player is nearby; in the long run,
    a face made of a fixed texture plus a small changing overlay, or a
    palette-colored node instead of a texture string.
-3. **Less garbage per tick.** Max ticks spike to 4-6x the average with many
+3. DONE 2026-10-08: **Less garbage per tick.** runtime.eval reuses one output
+   table (callers copy), floor.settle fills each panel's inputs and out in
+   place and reuses its queue, faces compare live values in place instead of
+   building a key string, and is_valid() replaces get_pos() (a new vector
+   per call). Bench, two runs: busy 256 from 33 ms avg / 92 max to 23-26 /
+   36-57; heavy 16 from 25 / 30 to 17-21 / 24-28; idle 256 0.61 ms. One run
+   had a lone 67 ms spike on busy 64. What garbage is left is mostly face
+   texture strings (~4 KB per changed face per tick): item 2.
+   Original note: Max ticks spike to 4-6x the average with many
    panels (busy 64: 9.5 ms avg, 41 ms max), most likely GC. Allocated every
    tick per panel: gather()'s inputs table, runtime.eval's out table, P.out
    = {}, the face key and texture strings. Reuse tables per panel instead.

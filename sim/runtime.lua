@@ -8,6 +8,9 @@
 -- registers and presses, so when none of them changed since the last eval
 -- it returns the last result without running the network. state.ran says
 -- whether the last eval really ran; state.runs counts the ones that did.
+--
+-- No garbage per tick: eval returns the same output table every time, so a
+-- caller that keeps outputs across evals must copy them.
 
 -- In-game, init.lua loads sim/ files with loadfile and passes its own loader.
 local require = type(...) == "function" and ... or require
@@ -21,7 +24,7 @@ local PORTS = grid.PORTS
 function runtime.new(net)
 	local state = {
 		runtime = runtime, net = net, reg = {}, vals = {}, pressed = {},
-		last_in = {}, last_out = nil, ran = false, committed = false, runs = 0,
+		last_in = {}, last_out = nil, ran = false, committed = false, runs = 0, out = {},
 	}
 	for i, n in ipairs(net.nodes) do
 		if n.op == "reg" then state.reg[i] = n.init end
@@ -29,7 +32,8 @@ function runtime.new(net)
 	return state
 end
 
--- Evaluate the instant part of the tick. Returns the 32 edge outputs.
+-- Evaluate the instant part of the tick. Returns the 32 edge outputs, in a
+-- table the next eval overwrites.
 function runtime.eval(state, inputs)
 	local last_in = state.last_in
 	if state.last_out then
@@ -80,7 +84,7 @@ function runtime.eval(state, inputs)
 		end
 		vals[i] = v
 	end
-	local out = {}
+	local out = state.out
 	for p = 0, PORTS - 1 do out[p] = vals[net.outs[p]] end
 	state.last_out, state.ran, state.committed = out, true, false
 	state.runs = state.runs + 1
@@ -104,7 +108,7 @@ function runtime.commit(state)
 	end
 	state.committed = true
 	if changed then
-		state.pressed = {}
+		for k in pairs(state.pressed) do state.pressed[k] = nil end
 		state.last_out = nil -- the next eval must run
 	end
 end

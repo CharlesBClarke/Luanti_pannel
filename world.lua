@@ -133,20 +133,32 @@ core.register_entity("redstone_panels:face", {
 	},
 })
 
+-- Copy the live values of `nodes` into `into`; true if any differed.
+local function copy_changed(vals, nodes, into)
+	local changed = false
+	for j, v in ipairs(nodes) do
+		local on = vals[v] == true
+		if into[j] ~= on then
+			into[j] = on
+			changed = true
+		end
+	end
+	return changed
+end
+
+-- Redraw the face if its lamps or probes changed. No garbage unless it does.
 local function update_face(P)
+	local alive = P.entity and P.entity:is_valid()
 	-- Nothing evaluated since the last redraw: the face can't have changed.
-	if P.face_runs == P.state.runs and P.entity and P.entity:get_pos() then return end
+	if P.face_runs == P.state.runs and alive then return end
 	P.face_runs = P.state.runs
-	local lamps, probes = runtime.lamp_list(P.state), runtime.probes(P.state)
-	local key = {}
-	for _, on in ipairs(lamps) do key[#key + 1] = on and "1" or "0" end
-	key[#key + 1] = "|"
-	for _, on in ipairs(probes) do key[#key + 1] = on and "1" or "0" end
-	key = table.concat(key)
-	if key == P.face_key and P.entity and P.entity:get_pos() then return end
-	P.face_key = key
-	local tex = face_texture(P, lamps, probes)
-	if not (P.entity and P.entity:get_pos()) then
+	P.face_lamps, P.face_probes = P.face_lamps or {}, P.face_probes or {}
+	local vals = P.state.vals
+	local lamps_changed = copy_changed(vals, P.net.lamps, P.face_lamps)
+	local probes_changed = copy_changed(vals, P.net.probes, P.face_probes)
+	if not (lamps_changed or probes_changed) and alive then return end
+	local tex = face_texture(P, P.face_lamps, P.face_probes)
+	if not alive then
 		local at = vector.offset(P.pos, 0, -0.5 + PANEL_HEIGHT + FACE_THICKNESS / 2 + 0.001, 0)
 		for _, obj in ipairs(core.get_objects_inside_radius(at, 0.1)) do
 			local ent = obj:get_luaentity()

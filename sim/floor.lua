@@ -117,8 +117,9 @@ end
 
 -- A panel's 32 input bits: a linked side reads the neighbour's facing
 -- outputs; any other side asks external(P, side) and sets all its bits alike.
-function floor.gather(P, external)
-	local inputs = {}
+-- Fills `inputs` if given (no garbage), else a new table.
+function floor.gather(P, external, inputs)
+	inputs = inputs or {}
 	for d = 0, 3 do
 		local Q = P.neighbors[d]
 		if Q then
@@ -133,12 +134,18 @@ function floor.gather(P, external)
 end
 
 -- Settle the instant part of the tick for every panel in `list`. Sets each
--- panel's inputs and out; the runtime states keep the last eval, ready to
--- commit. Gives up after max_evals evaluations and returns false.
+-- panel's inputs and out (its own tables, filled in place); the runtime
+-- states keep the last eval, ready to commit. Gives up after max_evals
+-- evaluations and returns false.
+local queue, queued = {}, {} -- reused every tick
 function floor.settle(list, external, max_evals)
-	local queue, queued = {}, {}
+	for i = #queue, 1, -1 do queue[i] = nil end
+	for P in pairs(queued) do queued[P] = nil end
 	for i, P in ipairs(list) do
-		if P.looped then P.out = {} end
+		P.out, P.inputs = P.out or {}, P.inputs or {}
+		if P.looped then
+			for p = 0, PORTS - 1 do P.out[p] = nil end
+		end
 		queue[i] = P
 		queued[P] = true
 	end
@@ -148,7 +155,7 @@ function floor.settle(list, external, max_evals)
 		local P = queue[head]
 		head = head + 1
 		queued[P] = nil
-		P.inputs = floor.gather(P, external)
+		floor.gather(P, external, P.inputs)
 		local out = runtime.eval(P.state, P.inputs)
 		for d = 0, 3 do
 			local Q = P.neighbors[d]
@@ -163,7 +170,8 @@ function floor.settle(list, external, max_evals)
 				end
 			end
 		end
-		P.out = out
+		local own = P.out
+		for p = 0, PORTS - 1 do own[p] = out[p] end
 	end
 	return true
 end

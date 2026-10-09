@@ -89,11 +89,12 @@ local function plain_settle(list)
 		for _, P in ipairs(list) do
 			P.inputs = floor.gather(P, external)
 			P.state.last_out = nil
-			local out = runtime.eval(P.state, P.inputs)
+			local out, own = runtime.eval(P.state, P.inputs), {}
 			for p = 0, grid.PORTS - 1 do
 				if (out[p] == true) ~= (P.out[p] == true) then changed = true end
+				own[p] = out[p]
 			end
-			P.out = out
+			P.out = own
 		end
 		if not changed then return end
 	end
