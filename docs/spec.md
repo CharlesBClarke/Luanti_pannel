@@ -184,7 +184,9 @@ Decided 2026-10-08. Limits are derived from these goals, not picked on their own
 
 - **Who it is for:** a home server with a few friends, not a public server with 20+ players.
 - **The bar: beat a famous redstone CPU.** The reference is CHUNGUS 2 (Sammyuri, 2021): 8-bit, 1 Hz (a 10-redstone-tick cycle, 4-stage pipeline), 7 registers, 256 B RAM, a 64 B data cache, 4 KB of program in 128 B pages, an ALU with multiply, divide and square root, a 32×32 display and an 8-button controller, built about the size of a cruise ship. Its videos were sped up hundreds to thousands of times on a special server; in real play it runs at 1 Hz. A redstone tick is 0.1 s, the same as a panel step at 1×, so the numbers compare directly.
-- **Goal:** a CHUNGUS-class CPU built from panels runs **faster than 1 Hz in real time**, while a few friends play normally on the same server, in a far smaller footprint. Faster comes from the speed setting (at 2×, a 10-step cycle is 2 Hz) and from designs with shorter cycles, since wiring is instant and only torches take a step.
+- **Two goals** (decided 2026-10-09):
+  - **Showpiece, on CHUNGUS's terms:** given a server to itself, as CHUNGUS had, a panel computer beats CHUNGUS 2: at least its features, **faster than 1 Hz in real time**, in a far smaller footprint. Faster comes from the speed setting (at 2×, a 10-step cycle is 2 Hz) and from designs with shorter cycles, since wiring is instant and only torches take a step. Measured 2026-10-09: about 800k compiled nodes fit a whole 100 ms tick at today's evaluator speed, enough for a CHUNGUS-class build.
+  - **Everyday:** on a normal server, panels stay within the budget below while friends play, which is what the many simple builds need. The showpiece never comes at their expense.
 - **Budget (target, to be confirmed on a modest server CPU):** panels use at most about 15 ms of each 100 ms tick on average, and no tick goes over 50 ms because of panels.
 - **Reference builds** that must fit the budget together, each checked with the benchmark:
   1. A CHUNGUS-class CPU (built or simulated at its real size) at the speed needed for more than 1 Hz.
