@@ -131,7 +131,23 @@ Items, in order of expected payoff:
    changed. Watch out for: buttons counting down (registers change, so they
    stay awake), speeds above 1x later, and the warm-up. Fuzz-check against
    always evaluating.
-2. **Cheaper faces.** With every face changing every tick, redraws cost as
+2. DONE 2026-10-08 (server side): **Cheaper faces.** thumb.face prepares each
+   design's face once (static cells in one string, on/off fragments for live
+   cells), so a redraw only joins strings (5 us to 0.5 us offline;
+   pixel-for-pixel fuzz test in tests/thumb_spec.lua). Faces with no player
+   within FACE_VIEW_RANGE (48) are not redrawn until one comes near; the
+   bench and smoke set world.all_faces to draw everything anyway. Bench,
+   every face drawn: busy 256 faces 6.3 to 1.3 ms, tick 16 ms avg / 29 max.
+   Still open: client texture memory (each distinct face state is a new
+   texture the client keeps), not checked in game yet.
+   **GC spikes (measured 2026-10-08):** our tick now makes little garbage
+   (sim ~0 KB, faces ~15 KB per tick at 64 busy panels; commit garbage is
+   mesecons when edge outputs toggle, and save_state every SAVE_TICKS). The
+   remaining 30-60 ms spikes are the GC collecting VoxeLibre/engine garbage
+   (MBs per tick between our ticks, even with 0 panels: likely mapgen; the
+   heap reached 240 MB) while our tick runs. Not ours to fix; a server could
+   tune the GC (collectgarbage setpause/setstepmul) if it matters.
+   Original note: With every face changing every tick, redraws cost as
    much as the logic (busy 256: 7.9 ms of 20). Each redraw formats 64+ fill
    strings into one ~4 KB texture and sends all of it to every client. Every
    distinct live state is also a new texture the client builds and caches,

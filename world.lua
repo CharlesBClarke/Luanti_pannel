@@ -97,25 +97,21 @@ end
 
 local FACE_CELL_PX = 6 -- texture pixels per cell on a placed panel's face
 
--- The panel's own cells with their live state, one level deep. A nested
--- panel is a plain tile with a lamp square inside if it has lamps (lit if
--- any of them is: MVP on/off, no averaging yet). Lamps, buttons and levers
--- show their real state, so IO always reads true.
-local function face_texture(P, lamps, probes)
-	local colors, inner, live = {}, {}, thumb.LIVE
-	for j, c in ipairs(P.net.probe_cells) do
-		colors[c] = live[P.cells[c].kind][probes[j] and 2 or 1]
+local FACE_VIEW_RANGE = 48 -- faces further than this from every player are not redrawn
+
+-- Prepared faces (thumb.face), one per compiled design.
+local faces = setmetatable({}, { __mode = "k" })
+
+-- Players' positions, read once per tick; faces out of their range wait.
+local viewers = {}
+world.all_faces = false -- benchmark: redraw every face, as if players were everywhere
+
+local function in_view(pos)
+	if world.all_faces then return true end
+	for _, v in ipairs(viewers) do
+		if vector.distance(v, pos) <= FACE_VIEW_RANGE then return true end
 	end
-	local lit = {}
-	for j, on in ipairs(lamps) do
-		local c = P.net.lamp_cells[j]
-		lit[c] = lit[c] or on
-	end
-	for c, on in pairs(lit) do
-		local color = live.lamp[on and 2 or 1]
-		if P.cells[c].kind == "panel" then inner[c] = color else colors[c] = color end
-	end
-	return thumb.texture(P.cells, { cell_px = FACE_CELL_PX, colors = colors, inner = inner })
+	return false
 end
 
 -- A thin flat box lying on top of the panel. Its top texture follows the
@@ -146,18 +142,21 @@ local function copy_changed(vals, nodes, into)
 	return changed
 end
 
--- Redraw the face if its lamps or probes changed. No garbage unless it does.
+-- Redraw the face if its lamps or probes changed and a player is near
+-- enough to see it. No garbage unless it does.
 local function update_face(P)
 	local alive = P.entity and P.entity:is_valid()
 	-- Nothing evaluated since the last redraw: the face can't have changed.
 	if P.face_runs == P.state.runs and alive then return end
+	if alive and not in_view(P.pos) then return end
 	P.face_runs = P.state.runs
 	P.face_lamps, P.face_probes = P.face_lamps or {}, P.face_probes or {}
 	local vals = P.state.vals
 	local lamps_changed = copy_changed(vals, P.net.lamps, P.face_lamps)
 	local probes_changed = copy_changed(vals, P.net.probes, P.face_probes)
 	if not (lamps_changed or probes_changed) and alive then return end
-	local tex = face_texture(P, P.face_lamps, P.face_probes)
+	faces[P.net] = faces[P.net] or thumb.face(P.cells, P.net, FACE_CELL_PX)
+	local tex = thumb.face_texture(faces[P.net], P.face_lamps, P.face_probes)
 	if not alive then
 		local at = vector.offset(P.pos, 0, -0.5 + PANEL_HEIGHT + FACE_THICKNESS / 2 + 0.001, 0)
 		for _, obj in ipairs(core.get_objects_inside_radius(at, 0.1)) do
@@ -372,6 +371,8 @@ local function tick()
 		end
 	end
 	if links_dirty then relink() end
+	viewers = {}
+	for _, player in ipairs(core.get_connected_players()) do viewers[#viewers + 1] = player:get_pos() end
 	local settle_started = core.get_us_time()
 
 	-- Settle the instant part of every wall (sim/floor.lua), then advance everything.

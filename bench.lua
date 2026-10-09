@@ -84,6 +84,7 @@ core.register_chatcommand("panel_stress", {
 if core.settings:get_bool("redstone_panels.bench", false) then
 	local function run()
 		world.keep_loaded = true
+		world.all_faces = true -- measure the worst case: every face watched
 		local ids = stress_ids()
 		local lines = {}
 		local function step(k)

@@ -64,6 +64,69 @@ function thumb.texture(cells, opts)
 	return table.concat(parts, "^")
 end
 
+-- Live face of a placed panel, prepared once per design so a redraw only
+-- joins ready-made strings. The panel's own cells show their live state,
+-- one level deep: a probe colors its part; a cell with lamps shows lamp
+-- colors, lit if any of its lamps is (a nested panel as a smaller square
+-- inside its tile). net is the compiled design (probes, lamps and their cells).
+function thumb.face(cells, net, cell_px)
+	local px, stride = thumb.size(cell_px), cell_px + GAP_PX
+	local inset = math.floor(cell_px / 4)
+	local live, sources = thumb.LIVE, {} -- sources[cell] = { lamps = {j...}, probes = {j...} }
+	local function src(c)
+		sources[c] = sources[c] or { lamps = {}, probes = {} }
+		return sources[c]
+	end
+	for j, c in ipairs(net.probe_cells) do table.insert(src(c).probes, j) end
+	for j, c in ipairs(net.lamp_cells) do table.insert(src(c).lamps, j) end
+	local function fill(x, y, size, off, color)
+		local cx, cy = GAP_PX + (x - 1) * stride + off, GAP_PX + (y - 1) * stride + off
+		return ("[fill:%dx%d:%d,%d:%s"):format(size, size, cx, cy, color)
+	end
+	local static, entries = { ("[fill:%dx%d:%s"):format(px, px, thumb.COLOR_BG) }, {}
+	for y = 1, grid.SIZE do
+		for x = 1, grid.SIZE do
+			local i = grid.index(x, y)
+			local cell, s = cells[i], sources[i]
+			local kind = cell and cell.kind
+			local lamps = s and #s.lamps > 0
+			if kind == "panel" and lamps then
+				static[#static + 1] = fill(x, y, cell_px, 0, thumb.COLORS.panel)
+				if inset > 0 then
+					local w = cell_px - 2 * inset
+					entries[#entries + 1] = { lamps = s.lamps, probes = {},
+						fill(x, y, w, inset, live.lamp[1]), fill(x, y, w, inset, live.lamp[2]) }
+				end
+			elseif lamps then
+				entries[#entries + 1] = { lamps = s.lamps, probes = {},
+					fill(x, y, cell_px, 0, live.lamp[1]), fill(x, y, cell_px, 0, live.lamp[2]) }
+			elseif s and #s.probes > 0 then
+				entries[#entries + 1] = { lamps = {}, probes = s.probes,
+					fill(x, y, cell_px, 0, live[kind][1]), fill(x, y, cell_px, 0, live[kind][2]) }
+			else
+				local color = cell and thumb.COLORS[kind]
+					or (grid.is_edge(x, y) and thumb.COLOR_EDGE or thumb.COLOR_EMPTY)
+				static[#static + 1] = fill(x, y, cell_px, 0, color)
+			end
+		end
+	end
+	return { static = table.concat(static, "^"), entries = entries, buf = {} }
+end
+
+-- Texture string of a face from thumb.face, given the live lamp and probe
+-- states (lists of booleans in net.lamps and net.probes order).
+function thumb.face_texture(face, lamps, probes)
+	local buf = face.buf
+	buf[1] = face.static
+	for k, e in ipairs(face.entries) do
+		local on = false
+		for _, j in ipairs(e.lamps) do on = on or lamps[j] end
+		for _, j in ipairs(e.probes) do on = on or probes[j] end
+		buf[k + 1] = e[on and 2 or 1]
+	end
+	return table.concat(buf, "^", 1, #face.entries + 1)
+end
+
 -- Which sides of a compiled net read and drive their edge bits:
 -- edges[d] = { input = bool, output = bool } for d = 0..3.
 function thumb.edges(net)

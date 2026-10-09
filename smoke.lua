@@ -29,6 +29,7 @@ local sleep_and_wake
 
 local function run()
 	world.keep_loaded = true
+	world.all_faces = true
 	for x = -6, 6 do
 		for y = -2, 4 do
 			for z = -2, 6 do core.set_node(vector.offset(ORIGIN, x, y, z), { name = "air" }) end
