@@ -3,7 +3,7 @@
 -- that the signal crosses both panels, lights a lamp, and powers the wire.
 -- A third panel is driven by a redstone block on its west side.
 
-local sim, library, world, editor = ...
+local sim, library, world, editor, demo = ...
 local grid = sim.grid
 
 local ORIGIN = vector.new(0, 100, 0)
@@ -102,6 +102,10 @@ local function run()
 	-- C nests B, to check nesting compiles in-game.
 	local nest = design({ { 4, 4, { kind = "panel", id = b, speed = 1 } } })
 	assert(library.add(nest, "nest", "smoke"))
+
+	-- The /panel_demo designs compile in-game.
+	assert(demo.ids()["Clock Tower"], "demo designs")
+	core.log("action", "[redstone_panels] " .. demo.report("demo panels:"))
 
 	-- Items show a thumbnail and a tooltip.
 	local meta = library.item(b):get_meta()

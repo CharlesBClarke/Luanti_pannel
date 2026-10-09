@@ -23,6 +23,7 @@ local sim = {
 	thumb = sim_require("sim.thumb"),
 	edit = sim_require("sim.edit"),
 	stress = sim_require("sim.stress"),
+	demos = sim_require("sim.demos"),
 }
 
 local function load(file, ...)
@@ -39,8 +40,9 @@ redstone_panels.world = world
 redstone_panels.editor = editor
 
 load("bench.lua", sim, library, world)
+local demo = load("demo.lua", sim, library, world)
 
 -- Lets scripts/smoke.sh start a server, run a small scenario, and exit.
 if core.settings:get_bool("redstone_panels.smoke_test", false) then
-	load("smoke.lua", sim, library, world, editor)
+	load("smoke.lua", sim, library, world, editor, demo)
 end
